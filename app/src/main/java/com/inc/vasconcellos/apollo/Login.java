@@ -61,7 +61,9 @@ public class Login extends ActionBarActivity implements View.OnClickListener {
 
                                         if (loggedIn) {
                                             logged = true;
-                                            loginButton.setText("Logado");
+                                            username.setVisibility(View.GONE);
+                                            password.setVisibility(View.GONE);
+                                            loginButton.setVisibility(View.GONE);
                                         } else {
                                             loginButton.setText("Error");
                                         }
