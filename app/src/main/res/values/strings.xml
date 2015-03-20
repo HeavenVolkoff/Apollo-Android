@@ -1,0 +1,11 @@
+<resources>
+    <string name="app_name">Apollo</string>
+
+    <string name="hello_world">Hello world!</string>
+    <string name="action_settings">Settings</string>
+
+    <string name="username">Usuário</string>
+    <string name="password">Senha</string>
+    <string name="logo">Logo</string>
+    <string name="login">Entrar</string>
+</resources>
