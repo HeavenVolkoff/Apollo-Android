@@ -1,6 +1,5 @@
 package com.inc.vasconcellos.apollo;
 
-import android.app.Activity;
 import android.support.v7.app.ActionBarActivity;
 import android.os.Bundle;
 import android.util.Log;
@@ -11,15 +10,12 @@ import android.widget.EditText;
 import android.widget.ImageView;
 
 import com.github.nkzawa.emitter.Emitter;
-import com.github.nkzawa.socketio.client.IO;
-import com.github.nkzawa.socketio.client.Socket;
 import com.nispok.snackbar.Snackbar;
 import com.nispok.snackbar.SnackbarManager;
 import com.nispok.snackbar.enums.SnackbarType;
 import com.nispok.snackbar.listeners.ActionClickListener;
 import com.pnikosis.materialishprogress.ProgressWheel;
 
-import java.net.URISyntaxException;
 
 
 public class Login extends ActionBarActivity implements View.OnClickListener {
@@ -32,7 +28,8 @@ public class Login extends ActionBarActivity implements View.OnClickListener {
     private ProgressWheel progressWheel;
     
     private Apollo apollo;
-    private Activity self;
+
+    private Emitter.Listener loginListener;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -41,7 +38,6 @@ public class Login extends ActionBarActivity implements View.OnClickListener {
 
         //Initialize self reference
         apollo = Apollo.getInstance();
-        self = this;
 
         //Initialize Logo ImageView and set logoDrawable to it
         ImageView logo = (ImageView) findViewById(R.id.logo);
@@ -57,6 +53,23 @@ public class Login extends ActionBarActivity implements View.OnClickListener {
 
         //Initialize Spinner Bar
         progressWheel = (ProgressWheel) findViewById(R.id.progressWheel);
+
+        //Login Listener
+        loginListener = new Emitter.Listener() {
+            @Override
+            public void call(final Object... args) {
+                runOnUiThread(new Runnable() {
+                    @Override
+                    public void run() {
+                        Boolean loggedIn = args[1] instanceof Boolean? (Boolean) args[1] : false;
+                        onLoginReceived(loggedIn);
+                    }
+                });
+            }
+        };
+
+        //Add Listener to the Event queue
+        apollo.on().login(loginListener);
     }
 
     public void onLoginReceived(boolean loggedIn){
@@ -82,14 +95,14 @@ public class Login extends ActionBarActivity implements View.OnClickListener {
                         .type(SnackbarType.MULTI_LINE) // Set is as a multi-line snackbar
                         .color(getResources().getColor(R.color.material_red_700)) //change the background color
                         .text(R.string.failedLogin)
-                        .duration(Snackbar.SnackbarDuration.LENGTH_INDEFINITE)
+                        .duration(Snackbar.SnackbarDuration.LENGTH_INDEFINITE) //change display time to indefinite
                         .actionLabel(R.string.close) // action button label
                         .actionListener(new ActionClickListener() {
                             @Override
                             public void onActionClicked(Snackbar snackbar) {
                                 snackbar.dismiss();
                             }
-                        }), self);
+                        }), this);
     }
 
     @Override

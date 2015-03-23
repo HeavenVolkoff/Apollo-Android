@@ -6,9 +6,7 @@ import com.github.nkzawa.emitter.Emitter;
 import com.github.nkzawa.socketio.client.IO;
 import com.github.nkzawa.socketio.client.Socket;
 
-import java.lang.reflect.Array;
 import java.net.URISyntaxException;
-import java.util.Arrays;
 import java.util.HashMap;
 
 public class Apollo{
@@ -32,7 +30,7 @@ public class Apollo{
     private static final HashMap<String, Boolean> LISTENERS = new HashMap<>(4);
 
     //Internal
-    private Socket _socket;
+    private Socket socket;
     private Boolean logged;
     private ApolloSocket on;
     private ApolloSocket emit;
@@ -48,10 +46,10 @@ public class Apollo{
         //Private Methods
         private boolean internalManager(String event, Object... args){
             if(type.equals(EMIT)){
-                return _emit(event, args);
+                return emit(event, args);
 
             }else if(type.equals(ON) && args[0] instanceof Emitter.Listener){
-                return _on(event, (Emitter.Listener) args[0]);
+                return on(event, (Emitter.Listener) args[0]);
             }
 
             return false;
@@ -89,10 +87,10 @@ public class Apollo{
 
         //Initialize Socket
         try{
-            _socket = IO.socket(SERVER_ADDRESS);
+            socket = IO.socket(SERVER_ADDRESS);
 
             //Connect to Server
-            _socket.connect();
+            socket.connect();
             Log.d(TAG, "Connected to Server");
 
         } catch (URISyntaxException e) {
@@ -122,19 +120,22 @@ public class Apollo{
         return instance;
     }
 
-    private boolean _on(final String event, Emitter.Listener fn){
+    public boolean on(final String event, Emitter.Listener fn){
         if(LISTENERS.containsKey(event)){
+            Log.d(TAG, "Added custom listener to: " + event);
+
             Emitter.Listener controlFlow = new Emitter.Listener(){
 
                 @Override
                 public void call(Object... args) {
+                    Log.d(TAG, "Received custom event: " + event);
                     LISTENERS.put(event, false);
                 }
             };
 
-            _socket.off(event, controlFlow);
-            _socket.on(event, fn);
-            _socket.on(event, controlFlow);
+            socket.off(event, controlFlow);
+            socket.on(event, fn);
+            socket.on(event, controlFlow);
 
             return true;
         }
@@ -142,14 +143,18 @@ public class Apollo{
         return false;
     }
 
-    private boolean _emit(String event, Object... args){
-        if(LISTENERS.containsKey(event) && LISTENERS.get(event) && isConnected()){
-            Log.d(TAG, "Emitted custom event: " + event + " with: " + Arrays.toString(args));
+    public ApolloSocket on(){
+        return this.on;
+    }
+
+    public boolean emit(String event, Object... args){
+        if(LISTENERS.containsKey(event) && !LISTENERS.get(event) && isConnected()){
+            Log.d(TAG, "Emitted custom event: " + event);
 
             String eventName = "request" + event.substring(0,1).toUpperCase() + event.substring(1);
 
             LISTENERS.put(event, true);
-            _socket.emit(eventName, args);
+            socket.emit(eventName, args);
 
             return true;
         }
@@ -161,12 +166,8 @@ public class Apollo{
         return this.emit;
     }
 
-    public ApolloSocket on(){
-        return this.on;
-    }
-
     public Boolean isConnected() {
-        return _socket.connected();
+        return socket.connected();
     }
 
     public Boolean isLogged() {

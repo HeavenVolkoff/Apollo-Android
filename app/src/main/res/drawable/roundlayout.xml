@@ -4,7 +4,7 @@
     android:shape="rectangle"   >
 
     <solid
-        android:color="@color/darkPrimary" >
+        android:color="?attr/colorPrimaryDark" >
     </solid>
 
     <padding
