@@ -8,4 +8,6 @@
     <string name="password">Senha</string>
     <string name="logo">Logo</string>
     <string name="login">Entrar</string>
+    <string name="failedLogin">Sua senha ou usuário estão incorretos</string>
+    <string name="close">Fechar</string>
 </resources>

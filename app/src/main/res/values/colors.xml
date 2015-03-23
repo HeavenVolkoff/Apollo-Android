@@ -1,8 +1,13 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <color name="material_indigo_500">#3F51B5</color>
-    <color name="material_indigo_700">#303F9F</color>
-    <color name="material_indigo_A200">#536DFE</color>
-    <color name="material_blue_800">#1565C0</color>
-    <color name="white">#FAFAFA</color>
+    <color name="darkPrimary">#303F9F</color>
+    <color name="primary">#3F51B5</color>
+    <color name="light">#C5CAE9</color>
+    <color name="text">#FFFFFF</color>
+    <color name="accent">#448AFF</color>
+    <color name="primaryText">#212121</color>
+    <color name="secondaryText">#727272</color>
+    <color name="divider">#B6B6B6</color>
+    
+    <color name="material_red_700">#d32f2f</color>
 </resources>

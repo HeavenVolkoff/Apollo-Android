@@ -1,5 +1,6 @@
 package com.inc.vasconcellos.apollo;
 
+import android.app.Activity;
 import android.support.v7.app.ActionBarActivity;
 import android.os.Bundle;
 import android.util.Log;
@@ -12,6 +13,11 @@ import android.widget.ImageView;
 import com.github.nkzawa.emitter.Emitter;
 import com.github.nkzawa.socketio.client.IO;
 import com.github.nkzawa.socketio.client.Socket;
+import com.nispok.snackbar.Snackbar;
+import com.nispok.snackbar.SnackbarManager;
+import com.nispok.snackbar.enums.SnackbarType;
+import com.nispok.snackbar.listeners.ActionClickListener;
+import com.pnikosis.materialishprogress.ProgressWheel;
 
 import java.net.URISyntaxException;
 
@@ -23,14 +29,19 @@ public class Login extends ActionBarActivity implements View.OnClickListener {
     private Button loginButton;
     private EditText username;
     private EditText password;
-    private Socket socket;
-    private Boolean connected = false;
-    private Boolean logged = false;
+    private ProgressWheel progressWheel;
+    
+    private Apollo apollo;
+    private Activity self;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_login);
+
+        //Initialize self reference
+        apollo = Apollo.getInstance();
+        self = this;
 
         //Initialize Logo ImageView and set logoDrawable to it
         ImageView logo = (ImageView) findViewById(R.id.logo);
@@ -44,48 +55,42 @@ public class Login extends ActionBarActivity implements View.OnClickListener {
         username = (EditText) findViewById(R.id.loginUsername);
         password = (EditText) findViewById(R.id.loginPassword);
 
-        //Initialize Socket and connect to server
-        try {
-            socket = IO.socket("http://104.236.0.59:1969");
+        //Initialize Spinner Bar
+        progressWheel = (ProgressWheel) findViewById(R.id.progressWheel);
+    }
 
-            //Initialize Listeners
-            socket.on("login", new Emitter.Listener(){
-                @Override
-                public void call(final Object... args) {
-                    runOnUiThread(
-                            new Runnable() {
-                                @Override
-                                public void run() {
-                                    if(args[1] != null){
-                                        Boolean loggedIn = (Boolean) args[1];
+    public void onLoginReceived(boolean loggedIn){
+        //Dismiss Progress Wheel
+        progressWheel.setVisibility(View.GONE);
 
-                                        if (loggedIn) {
-                                            logged = true;
-                                            username.setVisibility(View.GONE);
-                                            password.setVisibility(View.GONE);
-                                            loginButton.setVisibility(View.GONE);
-                                        } else {
-                                            loginButton.setText("Error");
-                                        }
-                                    }else{
-                                        loginButton.setText("Error");
-                                    }
-                                }
-                            }
-                    );
-                }
-            });
+        if (loggedIn) {
+                Log.d(TAG, "Logged In");
+        }else{
+            Log.w(TAG, "Login Failed");
 
-            socket.connect();
-            connected = true;
-            Log.d(TAG, "Connected to Server");
+            username.setVisibility(View.VISIBLE);
+            password.setVisibility(View.VISIBLE);
+            loginButton.setVisibility(View.VISIBLE);
 
-        } catch (URISyntaxException e) {
-            Log.w(TAG, "Server is offline");
-            loginButton.setText("Error");
+            showErrorMsg();
         }
     }
 
+    public void showErrorMsg(){
+        SnackbarManager.show(
+                Snackbar.with(getApplicationContext())
+                        .type(SnackbarType.MULTI_LINE) // Set is as a multi-line snackbar
+                        .color(getResources().getColor(R.color.material_red_700)) //change the background color
+                        .text(R.string.failedLogin)
+                        .duration(Snackbar.SnackbarDuration.LENGTH_INDEFINITE)
+                        .actionLabel(R.string.close) // action button label
+                        .actionListener(new ActionClickListener() {
+                            @Override
+                            public void onActionClicked(Snackbar snackbar) {
+                                snackbar.dismiss();
+                            }
+                        }), self);
+    }
 
     @Override
     public boolean onCreateOptionsMenu(Menu menu) {
@@ -97,12 +102,21 @@ public class Login extends ActionBarActivity implements View.OnClickListener {
     //Login Button Click Listener
     @Override
     public void onClick(View v) {
-        String username = this.username.getText().toString();
-        String password = this.password.getText().toString();
+        if(apollo.isConnected() && !apollo.isLogged()){
+            String username = this.username.getText().toString();
+            String password = this.password.getText().toString();
 
-        if (connected && !logged && username.length() > 0 && password.length() > 0) {
-            socket.emit("login", username, password);
-            Log.d(TAG, "Emitted Login Event to Server");
+            if (username.length() > 0 && password.length() > 0) {
+                this.username.setVisibility(View.GONE);
+                this.password.setVisibility(View.GONE);
+                this.loginButton.setVisibility(View.GONE);
+                this.progressWheel.setVisibility(View.VISIBLE);
+
+                apollo.emit().login(username, password);
+                Log.d(TAG, "Emitted Login Event to Server");
+            }else{
+                showErrorMsg();
+            }
         }
     }
 }

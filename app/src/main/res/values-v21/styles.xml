@@ -1,15 +1,4 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
 
-    <style name="Theme.Apollo" parent="Theme.AppCompat.NoActionBar">
-        <!-- Set AppCompat’s color theming attrs -->
-        <item name="colorPrimary">@color/material_indigo_500</item>
-        <item name="colorPrimaryDark">@color/material_indigo_700</item>
-        <item name="colorAccent">@color/material_indigo_A200</item>
-        <item name="android:windowBackground">@color/material_blue_800</item>
-        <item name="android:textColorPrimary">@color/white</item>
-        <item name="android:colorButtonNormal">@color/material_indigo_A200</item>
-        <item name="android:navigationBarColor">@color/material_indigo_700</item>
-        <!-- Other attributes -->
-    </style>
 </resources>
