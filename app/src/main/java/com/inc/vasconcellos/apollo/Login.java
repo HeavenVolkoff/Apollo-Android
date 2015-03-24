@@ -72,6 +72,12 @@ public class Login extends ActionBarActivity implements View.OnClickListener {
         apollo.on().login(loginListener);
     }
 
+    @Override
+    protected void onDestroy() {
+        super.onDestroy();
+        apollo.off().login(loginListener);
+    }
+
     public void onLoginReceived(boolean loggedIn){
         //Dismiss Progress Wheel
         progressWheel.setVisibility(View.GONE);

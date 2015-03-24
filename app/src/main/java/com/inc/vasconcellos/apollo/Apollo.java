@@ -23,6 +23,8 @@ public class Apollo{
     //Constants
     private static final Integer EMIT = 0;
     private static final Integer ON = 1;
+    private static final Integer OFF = 2;
+    private static final Integer ONCE = 3;
     private static final String LOGIN = "login";
     private static final String INTIMATION = "intimation";
     private static final String PROCESS_PIECE = "processPiece";
@@ -34,6 +36,8 @@ public class Apollo{
     private Boolean logged;
     private ApolloSocket on;
     private ApolloSocket emit;
+    private ApolloSocket off;
+    private ApolloSocket once;
 
     //Socket Abstraction
     public class ApolloSocket {
@@ -47,9 +51,12 @@ public class Apollo{
         private boolean internalManager(String event, Object... args){
             if(type.equals(EMIT)){
                 return emit(event, args);
-
             }else if(type.equals(ON) && args[0] instanceof Emitter.Listener){
-                return on(event, (Emitter.Listener) args[0]);
+                return on(event, (Emitter.Listener) args[0], false);
+            }else if(type.equals(OFF) && args[0] instanceof Emitter.Listener){
+                return off(event, (Emitter.Listener) args[0]);
+            }else if(type.equals(ONCE) && args[0] instanceof Emitter.Listener){
+                return on(event, (Emitter.Listener) args[0], true);
             }
 
             return false;
@@ -78,6 +85,8 @@ public class Apollo{
         logged = false;
         on = new ApolloSocket(ON);
         emit = new ApolloSocket(EMIT);
+        off = new ApolloSocket(OFF);
+        once = new ApolloSocket(ONCE);
 
         //Initialize Listeners HashMap
         LISTENERS.put(LOGIN, false);
@@ -88,6 +97,14 @@ public class Apollo{
         //Initialize Socket
         try{
             socket = IO.socket(SERVER_ADDRESS);
+
+            //Login Listener
+            this.on(LOGIN, new Emitter.Listener() {
+                @Override
+                public void call(final Object... args) {
+                    logged = args[1] != null && args[1] instanceof Boolean ? (Boolean) args[1] : false;
+                }
+            }, false);
 
             //Connect to Server
             socket.connect();
@@ -109,45 +126,10 @@ public class Apollo{
         //Initialize Singleton
         instance = new Apollo();
 
-        //Login Listener
-        instance.on().login(new Emitter.Listener() {
-            @Override
-            public void call(final Object... args) {
-                instance.logged = args[1] != null && args[1] instanceof Boolean ? (Boolean) args[1] : false;
-            }
-        });
-
         return instance;
     }
 
-    public boolean on(final String event, Emitter.Listener fn){
-        if(LISTENERS.containsKey(event)){
-            Log.d(TAG, "Added custom listener to: " + event);
-
-            Emitter.Listener controlFlow = new Emitter.Listener(){
-
-                @Override
-                public void call(Object... args) {
-                    Log.d(TAG, "Received custom event: " + event);
-                    LISTENERS.put(event, false);
-                }
-            };
-
-            socket.off(event, controlFlow);
-            socket.on(event, fn);
-            socket.on(event, controlFlow);
-
-            return true;
-        }
-
-        return false;
-    }
-
-    public ApolloSocket on(){
-        return this.on;
-    }
-
-    public boolean emit(String event, Object... args){
+    private boolean emit(String event, Object... args){
         if(LISTENERS.containsKey(event) && !LISTENERS.get(event) && isConnected()){
             Log.d(TAG, "Emitted custom event: " + event);
 
@@ -165,6 +147,53 @@ public class Apollo{
     public ApolloSocket emit(){
         return this.emit;
     }
+
+    private boolean on(final String event, Emitter.Listener fn, Boolean once){
+        if(LISTENERS.containsKey(event)){
+            Log.d(TAG, "Added custom listener to: " + event);
+
+            Emitter.Listener controlFlow = new Emitter.Listener(){
+
+                @Override
+                public void call(Object... args) {
+                    Log.d(TAG, "Received custom event: " + event);
+                    LISTENERS.put(event, false);
+                }
+            };
+
+            socket.off(event, controlFlow);
+            if(!once){
+                socket.on(event, fn);
+            }else{
+                socket.once(event, fn);
+            }
+            socket.on(event, controlFlow);
+
+            return true;
+        }
+
+        return false;
+    }
+
+    public ApolloSocket on(){
+        return this.on;
+    }
+
+    public ApolloSocket once() { return this.once; }
+
+    private boolean off(String event, Emitter.Listener fn){
+        if(LISTENERS.containsKey(event)){
+            Log.d(TAG, "Removed custom listener from: " + event);
+
+            socket.off(event, fn);
+
+            return true;
+        }
+
+        return false;
+    }
+
+    public ApolloSocket off(){ return this.off; }
 
     public Boolean isConnected() {
         return socket.connected();
