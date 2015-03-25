@@ -7,7 +7,6 @@
     tools:context=".Login">
 
     <RelativeLayout
-        android:orientation="vertical"
         android:layout_width="fill_parent"
         android:layout_height="wrap_content"
         android:layout_centerInParent="true"
@@ -17,10 +16,50 @@
         android:layout_marginLeft="50dp"
         android:id="@+id/relativeLayout">
 
+
+        <FrameLayout
+            android:layout_width="fill_parent"
+            android:layout_height="wrap_content"
+            android:layout_centerVertical="true"
+            android:layout_centerHorizontal="true"
+            android:layout_alignParentTop="true"
+            android:id="@+id/connectionLayout"
+            android:background="@drawable/connection_layout">
+
+            <RelativeLayout
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_gravity="center">
+
+                <ImageView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:background="@drawable/ic_error_red_18dp"
+                    android:id="@+id/connectionImage"
+                    android:layout_centerVertical="true"
+                    android:contentDescription="@string/connectionLogo" />
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:textAppearance="?android:attr/textAppearanceSmall"
+                    android:text="@string/notConnected"
+                    android:id="@+id/serverConnection"
+                    android:singleLine="true"
+                    android:layout_centerVertical="true"
+                    android:layout_marginLeft="2dp"
+                    android:layout_marginRight="2dp"
+                    android:layout_toEndOf="@+id/connectionImage"
+                    android:textColor="@color/material_red_700" />
+
+            </RelativeLayout>
+
+        </FrameLayout>
+
         <ImageView
             android:layout_width="100dp"
             android:layout_height="100dp"
-            android:layout_alignParentTop="true"
+            android:layout_below="@id/connectionLayout"
             android:id="@+id/logo"
             android:contentDescription="@string/logo"
             android:layout_centerHorizontal="true" />

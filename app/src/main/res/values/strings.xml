@@ -10,4 +10,7 @@
     <string name="login">Entrar</string>
     <string name="failedLogin">Sua senha ou usuário estão incorretos</string>
     <string name="close">Fechar</string>
+
+    <string name="notConnected">Não Conectado</string>
+    <string name="connectionLogo">Logo representando a conexão</string>
 </resources>

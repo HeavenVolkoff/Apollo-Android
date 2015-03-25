@@ -10,4 +10,5 @@
     <color name="divider">#B6B6B6</color>
     
     <color name="material_red_700">#d32f2f</color>
+    <color name="material_blue_900">#1A237E</color>
 </resources>
