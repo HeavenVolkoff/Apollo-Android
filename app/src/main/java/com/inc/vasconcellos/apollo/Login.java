@@ -1,5 +1,6 @@
 package com.inc.vasconcellos.apollo;
 
+import android.os.Build;
 import android.support.v7.app.ActionBarActivity;
 import android.os.Bundle;
 import android.util.Log;
@@ -21,7 +22,7 @@ import com.pnikosis.materialishprogress.ProgressWheel;
 
 public class Login extends ActionBarActivity implements View.OnClickListener {
 
-    private static final String TAG = Login.class.getSimpleName();
+    public static final String TAG = Login.class.getSimpleName();
 
     private Button loginButton;
     private EditText username;
@@ -35,8 +36,8 @@ public class Login extends ActionBarActivity implements View.OnClickListener {
     //Listeners
     private Emitter.Listener loginListener;
     private Emitter.Listener connectListener;
-    private Emitter.Listener reconnecting;
-    private Emitter.Listener connectErrorListener;
+    private Emitter.Listener reconnectingListener;
+    private Emitter.Listener reconnectFailedListener;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -81,15 +82,68 @@ public class Login extends ActionBarActivity implements View.OnClickListener {
 
         //Connect Listener
         connectListener = new Emitter.Listener(){
-
             @Override
             public void call(Object... args) {
                 runOnUiThread(new Runnable() {
                     @Override
                     public void run() {
+                        Log.i(ApolloSocket.TAG, "Successfully Connected");
                         connectionStatus.setText(R.string.connected);
                         connectionStatus.setTextColor(getResources().getColor(R.color.material_green_700));
-                        connectionIcon.setBackground(getResources().getDrawable( R.drawable.ic_sync_green_18dp ));
+
+                        if(android.os.Build.VERSION.SDK_INT > Build.VERSION_CODES.LOLLIPOP){
+                            //Lollipop (API >= 21) Only Methods
+                            connectionIcon.setBackground(getApplicationContext().getDrawable(R.drawable.ic_sync_green_18dp));
+                        }else{
+                            //API < 21
+                            connectionIcon.setBackgroundDrawable(getApplicationContext().getResources().getDrawable(R.drawable.ic_sync_green_18dp));
+                        }
+                    }
+                });
+            }
+        };
+
+        //Reconnect Listener
+        reconnectingListener = new Emitter.Listener(){
+            @Override
+            public void call(final Object... args) {
+                runOnUiThread(new Runnable() {
+                    @Override
+                    public void run() {
+                        Log.i(ApolloSocket.TAG, "Reconnection Attempt number: " + args[0].toString());
+                        connectionStatus.setText(R.string.reconnecting);
+                        connectionStatus.setTextColor(getResources().getColor(R.color.material_yellow_700));
+
+                        if(android.os.Build.VERSION.SDK_INT > Build.VERSION_CODES.LOLLIPOP){
+                            //Lollipop (API >= 21) Only Methods
+                            connectionIcon.setBackground(getApplicationContext().getDrawable(R.drawable.ic_warning_amber_18dp));
+                        }else{
+                            //API < 21
+                            connectionIcon.setBackgroundDrawable(getApplicationContext().getResources().getDrawable(R.drawable.ic_warning_amber_18dp));
+                        }
+                    }
+                });
+            }
+        };
+
+        //Connection Error Listener
+        reconnectFailedListener = new Emitter.Listener(){
+            @Override
+            public void call(Object... args) {
+                runOnUiThread(new Runnable() {
+                    @Override
+                    public void run() {
+                        Log.i(ApolloSocket.TAG, "Reconnection Failed");
+                        connectionStatus.setText(R.string.connectionError);
+                        connectionStatus.setTextColor(getResources().getColor(R.color.material_red_700));
+
+                        if(android.os.Build.VERSION.SDK_INT > Build.VERSION_CODES.LOLLIPOP){
+                            //Lollipop (API >= 21) Only Methods
+                            connectionIcon.setBackground(getApplicationContext().getDrawable(R.drawable.ic_error_red_18dp));
+                        }else{
+                            //API < 21
+                            connectionIcon.setBackgroundDrawable(getApplicationContext().getResources().getDrawable(R.drawable.ic_error_red_18dp));
+                        }
                     }
                 });
             }
@@ -98,6 +152,8 @@ public class Login extends ActionBarActivity implements View.OnClickListener {
         //Add Listener to the Event queue
         apollo.on().login(loginListener);
         apollo.on().connect(connectListener);
+        apollo.on().reconnecting(reconnectingListener);
+        apollo.on().reconnectFailed(reconnectFailedListener);
 
         //Connect
         apollo.connect();

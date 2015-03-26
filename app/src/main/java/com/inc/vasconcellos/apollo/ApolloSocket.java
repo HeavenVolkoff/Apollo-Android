@@ -1,6 +1,5 @@
 package com.inc.vasconcellos.apollo;
 
-
 import android.util.Log;
 
 import com.github.nkzawa.emitter.Emitter;
@@ -13,7 +12,7 @@ import java.util.HashMap;
 public class ApolloSocket {
 
     //Logger Identifier String
-    private static final String TAG = "ApolloSocket";
+    public static final String TAG = "ApolloSocket";
 
     //Internal Socket Management
     private Socket socket;
@@ -23,6 +22,8 @@ public class ApolloSocket {
         //Initialize Socket
         try{
             socket = IO.socket(url);
+            //Max Reconnection attempts
+            socket.io().reconnectionAttempts(20);
 
         } catch (URISyntaxException e) {
             Log.e(TAG, "Error Parsing URL: " + url + ", error: " + e.getMessage());
@@ -110,8 +111,21 @@ public class ApolloSocket {
         return false;
     }
 
+    public void enableReconnect(){
+        Log.i(TAG, "teste Reconnecting");
+        socket.io().reconnection(true);
+    }
+
+    public void disableReconnect(){
+        Log.i(TAG, "teste Reconnecting disabel");
+        socket.io().reconnection(false);
+    }
+
+    public Boolean canReconnect() {
+        return socket.io().reconnection();
+    }
+
     public Boolean isConnected() {
         return socket.connected();
     }
-
 }

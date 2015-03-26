@@ -1,5 +1,10 @@
 package com.inc.vasconcellos.apollo;
 
+import android.content.Context;
+import android.content.IntentFilter;
+import android.net.ConnectivityManager;
+import android.net.NetworkInfo;
+import android.nfc.Tag;
 import android.util.Log;
 
 import com.github.nkzawa.emitter.Emitter;
@@ -28,6 +33,7 @@ public class Apollo{
 
     //Internal
     private ApolloSocket socket;
+    private ConnectivityReceiver connectivityReceiver;
     private Boolean logged;
     private SocketAbstraction on;
     private SocketAbstraction emit;
@@ -133,6 +139,32 @@ public class Apollo{
             //Should Never Happen, But in case it happens we have nothing to do otherwise exit;//TODO: Display a error Message to User Than Exit
             System.exit(1);
         }
+
+        //Initialize Receiver
+        connectivityReceiver = new ConnectivityReceiver(
+                new Runnable() {
+                    @Override
+                    public void run() {
+                        Log.i(ApolloSocket.TAG, "Network Enable, Reconnecting...");
+                        if(!Apollo.this.socket.canReconnect()){
+                            Apollo.this.socket.enableReconnect();
+                            Apollo.this.socket.connect();
+                        }
+                    }
+                }, null);
+        App.instance().registerReceiver(connectivityReceiver, new IntentFilter("android.net.conn.CONNECTIVITY_CHANGE"));
+
+        //onClose Listener
+        this.on.disconnect(new Emitter.Listener(){
+
+            @Override
+            public void call(Object... args) {
+                Log.i(ApolloSocket.TAG, "Network Disable, Disabling Reconnection.");
+                if(Apollo.this.connectivityReceiver.isNetworkAvailable(App.instance()) && Apollo.this.socket.canReconnect()){
+                    Apollo.this.socket.disableReconnect();
+                }
+            }
+        });
 
         //Login Listener
         this.on.login(new Emitter.Listener() {
