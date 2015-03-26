@@ -163,6 +163,9 @@ public class Login extends ActionBarActivity implements View.OnClickListener {
     protected void onDestroy() {
         super.onDestroy();
         apollo.off().login(loginListener);
+        apollo.off().connect(connectListener);
+        apollo.off().reconnecting(reconnectingListener);
+        apollo.off().reconnectFailed(reconnectFailedListener);
     }
 
     public void onLoginReceived(boolean loggedIn){

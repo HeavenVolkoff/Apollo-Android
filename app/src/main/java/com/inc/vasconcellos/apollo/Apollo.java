@@ -33,7 +33,6 @@ public class Apollo{
 
     //Internal
     private ApolloSocket socket;
-    private ConnectivityReceiver connectivityReceiver;
     private Boolean logged;
     private SocketAbstraction on;
     private SocketAbstraction emit;
@@ -137,34 +136,9 @@ public class Apollo{
             socket = new ApolloSocket(SERVER_ADDRESS, new String[] {LOGIN, PROCESS_INFO, PROCESS_PIECE, PROCESS_INFO});
         }catch (URISyntaxException e){
             //Should Never Happen, But in case it happens we have nothing to do otherwise exit;//TODO: Display a error Message to User Than Exit
+            e.printStackTrace();
             System.exit(1);
         }
-
-        //Initialize Receiver
-        connectivityReceiver = new ConnectivityReceiver(
-                new Runnable() {
-                    @Override
-                    public void run() {
-                        Log.i(ApolloSocket.TAG, "Network Enable, Reconnecting...");
-                        if(!Apollo.this.socket.canReconnect()){
-                            Apollo.this.socket.enableReconnect();
-                            Apollo.this.socket.connect();
-                        }
-                    }
-                }, null);
-        App.instance().registerReceiver(connectivityReceiver, new IntentFilter("android.net.conn.CONNECTIVITY_CHANGE"));
-
-        //onClose Listener
-        this.on.disconnect(new Emitter.Listener(){
-
-            @Override
-            public void call(Object... args) {
-                Log.i(ApolloSocket.TAG, "Network Disable, Disabling Reconnection.");
-                if(Apollo.this.connectivityReceiver.isNetworkAvailable(App.instance()) && Apollo.this.socket.canReconnect()){
-                    Apollo.this.socket.disableReconnect();
-                }
-            }
-        });
 
         //Login Listener
         this.on.login(new Emitter.Listener() {
@@ -192,6 +166,8 @@ public class Apollo{
     }
 
     public Boolean isConnected() { return socket.isConnected(); }
+
+    public Boolean isNetworkAvailable() { return socket.isNetworkAvailable(); }
 
     public void connect() { socket.connect(); }
 

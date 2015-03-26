@@ -1,5 +1,6 @@
 package com.inc.vasconcellos.apollo;
 
+import android.content.IntentFilter;
 import android.util.Log;
 
 import com.github.nkzawa.emitter.Emitter;
@@ -16,17 +17,42 @@ public class ApolloSocket {
 
     //Internal Socket Management
     private Socket socket;
+    private ConnectivityReceiver connectivityReceiver;
     private HashMap<String, ApolloEvent> events;
 
     public ApolloSocket(String url, String[] events) throws URISyntaxException{
-        //Initialize Socket
+
+        //Initialize Connection Receiver
+        connectivityReceiver = new ConnectivityReceiver(
+                new Runnable() {
+                    @Override
+                    public void run() {
+                        Log.i(ApolloSocket.TAG, "Network Enable, Reconnecting Socket...");
+
+                        if(!ApolloSocket.this.socket.connected()){
+                            ApolloSocket.this.socket.connect();
+                        }
+                    }
+                },
+                new Runnable() {
+                    @Override
+                    public void run() {
+                        Log.i(ApolloSocket.TAG, "Network Disable, Disconnecting Socket.");
+
+                        ApolloSocket.this.socket.disconnect();
+                    }
+                }
+        );
+        //Register Connection Receiver to CONNECTIVITY_CHANGE Event
+        App.instance().registerReceiver(connectivityReceiver, new IntentFilter("android.net.conn.CONNECTIVITY_CHANGE"));
+
         try{
             socket = IO.socket(url);
             //Max Reconnection attempts
             socket.io().reconnectionAttempts(20);
 
         } catch (URISyntaxException e) {
-            Log.e(TAG, "Error Parsing URL: " + url + ", error: " + e.getMessage());
+            Log.e(TAG, "Error Parsing URL: " + url);
             throw e;
         }
 
@@ -51,11 +77,19 @@ public class ApolloSocket {
 
     //Public Methods
     public void connect(){
-        socket.connect();
+        if(isNetworkAvailable()){
+            socket.connect();
+        }
     }
 
-    public boolean emit(String eventName, Object... args){
-        if(this.events.containsKey(eventName) && this.isConnected()){
+    public void disconnect(){
+        socket.disconnect();
+    }
+
+    public Boolean isNetworkAvailable(){ return connectivityReceiver.isNetworkAvailable(App.instance()); }
+
+    public Boolean emit(String eventName, Object... args){
+        if(this.isConnected() && this.events.containsKey(eventName)){
             ApolloEvent event = this.events.get(eventName);
 
             if(event != null && !event.isBusy()){
@@ -73,7 +107,7 @@ public class ApolloSocket {
         return false;
     }
 
-    public boolean on(final String eventName, Emitter.Listener fn, Boolean once){
+    public Boolean on(final String eventName, Emitter.Listener fn, Boolean once){
         if(this.events.containsKey(eventName)){
             ApolloEvent event = this.events.get(eventName);
 
@@ -99,7 +133,7 @@ public class ApolloSocket {
         return false;
     }
     
-    public boolean off(String eventName, Emitter.Listener fn){
+    public Boolean off(String eventName, Emitter.Listener fn){
         if(events.containsKey(eventName)){
             Log.d(TAG, "Removed custom listener from: " + eventName);
 
@@ -109,20 +143,6 @@ public class ApolloSocket {
         }
 
         return false;
-    }
-
-    public void enableReconnect(){
-        Log.i(TAG, "teste Reconnecting");
-        socket.io().reconnection(true);
-    }
-
-    public void disableReconnect(){
-        Log.i(TAG, "teste Reconnecting disabel");
-        socket.io().reconnection(false);
-    }
-
-    public Boolean canReconnect() {
-        return socket.io().reconnection();
     }
 
     public Boolean isConnected() {

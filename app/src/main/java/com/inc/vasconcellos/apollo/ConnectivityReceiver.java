@@ -12,21 +12,29 @@ import java.util.concurrent.ConcurrentLinkedQueue;
 public class ConnectivityReceiver extends BroadcastReceiver {
     private Runnable onConnected;
     private Runnable onDisconnected;
+    private Boolean busy;
 
     public ConnectivityReceiver(Runnable onConnected, Runnable onDisconnected){
         super();
         this.onConnected = onConnected;
         this.onDisconnected = onDisconnected;
+        this.busy = false;
     }
 
     @Override
     public void onReceive(Context context, Intent intent) {
-        Log.d(ConnectivityReceiver.class.getSimpleName(), "action: " + intent.getAction());
-        if(isNetworkAvailable(context) && onConnected != null){
-            onConnected.run();
-        }else if(onDisconnected != null){
-            onDisconnected.run();
+        Log.d(ConnectivityReceiver.class.getSimpleName(), "action: " + intent.getAction() + " " + intent.getDataString() + " " + intent.getExtras().toString() );
+        if(!busy){
+            busy = true;
+
+            if(isNetworkAvailable(context) && onConnected != null){
+                onConnected.run();
+            }else if(onDisconnected != null){
+                onDisconnected.run();
+            }
         }
+
+        busy = false;
     }
 
     public boolean isNetworkAvailable(Context context) {
