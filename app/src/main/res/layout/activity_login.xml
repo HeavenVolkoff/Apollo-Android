@@ -24,7 +24,8 @@
             android:layout_centerHorizontal="true"
             android:layout_alignParentTop="true"
             android:id="@+id/connectionLayout"
-            android:background="@drawable/connection_layout">
+            android:background="@drawable/connection_layout"
+            android:layout_marginBottom="5dp">
 
             <RelativeLayout
                 android:layout_width="wrap_content"
@@ -44,7 +45,7 @@
                     android:layout_height="wrap_content"
                     android:textAppearance="?android:attr/textAppearanceSmall"
                     android:text="@string/notConnected"
-                    android:id="@+id/serverConnection"
+                    android:id="@+id/connectionStatus"
                     android:singleLine="true"
                     android:layout_centerVertical="true"
                     android:layout_marginLeft="2dp"

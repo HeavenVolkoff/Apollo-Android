@@ -3,6 +3,7 @@ package com.inc.vasconcellos.apollo;
 import android.util.Log;
 
 import com.github.nkzawa.emitter.Emitter;
+import com.github.nkzawa.socketio.client.Socket;
 
 import java.net.URISyntaxException;
 
@@ -33,7 +34,10 @@ public class Apollo{
     private SocketAbstraction off;
     private SocketAbstraction once;
 
-    //Socket Abstraction
+    /**
+     * Socket Abstraction
+     * - This is something that I came up with to *try* emulate magic methods on java
+     */
     public class SocketAbstraction {
         private Integer type;
 
@@ -57,6 +61,46 @@ public class Apollo{
         }
 
         //Public Methods
+        public boolean connect(Object... args){
+            return internalManager(Socket.EVENT_CONNECT, args);
+        }
+
+        public boolean connectError(Object... args){
+            return internalManager(Socket.EVENT_CONNECT_ERROR, args);
+        }
+
+        public boolean timeout(Object... args){
+            return internalManager(Socket.EVENT_CONNECT_TIMEOUT, args);
+        }
+
+        public boolean disconnect(Object... args){
+            return internalManager(Socket.EVENT_DISCONNECT, args);
+        }
+
+        public boolean error(Object... args){
+            return internalManager(Socket.EVENT_ERROR, args);
+        }
+
+        public boolean reconnect(Object... args){
+            return internalManager(Socket.EVENT_RECONNECT, args);
+        }
+
+        public boolean reconnectAttempt(Object... args){
+            return internalManager(Socket.EVENT_RECONNECT_ATTEMPT, args);
+        }
+
+        public boolean reconnectFailed(Object... args){
+            return internalManager(Socket.EVENT_RECONNECT_FAILED, args);
+        }
+
+        public boolean reconnectError(Object... args){
+            return internalManager(Socket.EVENT_RECONNECT_ERROR, args);
+        }
+
+        public boolean reconnecting(Object... args){
+            return internalManager(Socket.EVENT_RECONNECTING, args);
+        }
+
         public boolean login(Object... args){
             return internalManager(LOGIN, args);
         }
@@ -97,8 +141,6 @@ public class Apollo{
                 logged = args[1] != null && args[1] instanceof Boolean ? (Boolean) args[1] : false;
             }
         });
-
-        socket.connect();
     }
 
     public static Apollo getInstance(){
@@ -118,6 +160,8 @@ public class Apollo{
     }
 
     public Boolean isConnected() { return socket.isConnected(); }
+
+    public void connect() { socket.connect(); }
 
     public SocketAbstraction on() {
         return on;

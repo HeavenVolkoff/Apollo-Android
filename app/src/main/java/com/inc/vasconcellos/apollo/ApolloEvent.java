@@ -10,10 +10,12 @@ public class ApolloEvent {
     private String name;
     private Emitter.Listener controlFlow;
     private Boolean busy;
+    private Boolean busyAble;
 
     public ApolloEvent(String name){
         this.name = name;
         this.busy = false;
+        this.busyAble = true;
         this.controlFlow =  new Emitter.Listener(){
             @Override
             public void call(Object... args) {
@@ -21,6 +23,13 @@ public class ApolloEvent {
                 ApolloEvent.this.busy = false;
             }
         };
+    }
+
+    public ApolloEvent(String name, Boolean busyAble){
+        this.name = name;
+        this.busy = false;
+        this.busyAble = busyAble;
+        this.controlFlow = null;
     }
 
     public String getName() {
@@ -32,7 +41,11 @@ public class ApolloEvent {
     }
 
     public Boolean isBusy() {
-        return busy;
+        return busyAble && busy;
+    }
+
+    public Boolean canBeBusy(){
+        return busyAble;
     }
 
     public void setBusy(){

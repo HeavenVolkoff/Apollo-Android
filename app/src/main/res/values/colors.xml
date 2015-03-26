@@ -11,4 +11,6 @@
     
     <color name="material_red_700">#d32f2f</color>
     <color name="material_blue_900">#1A237E</color>
+    <color name="material_green_700">#388E3C</color>
+    <color name="material_yellow_700">#FBC02D</color>
 </resources>

@@ -8,6 +8,7 @@ import android.view.View;
 import android.widget.Button;
 import android.widget.EditText;
 import android.widget.ImageView;
+import android.widget.TextView;
 
 import com.github.nkzawa.emitter.Emitter;
 import com.nispok.snackbar.Snackbar;
@@ -26,10 +27,16 @@ public class Login extends ActionBarActivity implements View.OnClickListener {
     private EditText username;
     private EditText password;
     private ProgressWheel progressWheel;
+    private ImageView connectionIcon;
+    private TextView connectionStatus;
     
     private Apollo apollo;
 
+    //Listeners
     private Emitter.Listener loginListener;
+    private Emitter.Listener connectListener;
+    private Emitter.Listener reconnecting;
+    private Emitter.Listener connectErrorListener;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -47,9 +54,13 @@ public class Login extends ActionBarActivity implements View.OnClickListener {
         loginButton = (Button) findViewById(R.id.loginButton);
         loginButton.setOnClickListener(this);
 
-        //Initialize Text fields
+        //Initialize Form fields
         username = (EditText) findViewById(R.id.loginUsername);
         password = (EditText) findViewById(R.id.loginPassword);
+
+        //Initialize Connection Status Fields
+        connectionStatus = (TextView) findViewById(R.id.connectionStatus);
+        connectionIcon = (ImageView) findViewById(R.id.connectionImage);
 
         //Initialize Spinner Bar
         progressWheel = (ProgressWheel) findViewById(R.id.progressWheel);
@@ -68,8 +79,28 @@ public class Login extends ActionBarActivity implements View.OnClickListener {
             }
         };
 
+        //Connect Listener
+        connectListener = new Emitter.Listener(){
+
+            @Override
+            public void call(Object... args) {
+                runOnUiThread(new Runnable() {
+                    @Override
+                    public void run() {
+                        connectionStatus.setText(R.string.connected);
+                        connectionStatus.setTextColor(getResources().getColor(R.color.material_green_700));
+                        connectionIcon.setBackground(getResources().getDrawable( R.drawable.ic_sync_green_18dp ));
+                    }
+                });
+            }
+        };
+
         //Add Listener to the Event queue
         apollo.on().login(loginListener);
+        apollo.on().connect(connectListener);
+
+        //Connect
+        apollo.connect();
     }
 
     @Override

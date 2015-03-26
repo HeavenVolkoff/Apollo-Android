@@ -30,7 +30,19 @@ public class ApolloSocket {
         }
 
         //Initialize Events
-        this.events = new HashMap<>();
+        this.events = new HashMap<String, ApolloEvent>() {{
+            put(Socket.EVENT_CONNECT, null);
+            put(Socket.EVENT_CONNECT_ERROR, null);
+            put(Socket.EVENT_CONNECT_TIMEOUT, null);
+            put(Socket.EVENT_DISCONNECT, null);
+            put(Socket.EVENT_ERROR, null);
+            put(Socket.EVENT_RECONNECT, null);
+            put(Socket.EVENT_RECONNECT_ATTEMPT, null);
+            put(Socket.EVENT_RECONNECT_FAILED, null);
+            put(Socket.EVENT_RECONNECT_ERROR, null);
+            put(Socket.EVENT_RECONNECTING, null);
+        }};
+
         for (String event : events){
             this.events.put(event, new ApolloEvent(event));
         }
@@ -45,7 +57,7 @@ public class ApolloSocket {
         if(this.events.containsKey(eventName) && this.isConnected()){
             ApolloEvent event = this.events.get(eventName);
 
-            if(!event.isBusy()){
+            if(event != null && !event.isBusy()){
                 Log.d(TAG, "Emitted custom event: " + eventName);
 
                 String requestName = "request" + eventName.substring(0,1).toUpperCase() + eventName.substring(1);
@@ -66,13 +78,19 @@ public class ApolloSocket {
 
             Log.d(TAG, "Added custom listener to: " + eventName);
 
-            socket.off(eventName, event.controlFlow());
+            if(event != null && event.canBeBusy()){
+                socket.off(eventName, event.controlFlow());
+            }
+
             if(!once){
                 socket.on(eventName, fn);
             }else{
                 socket.once(eventName, fn);
             }
-            socket.on(eventName, event.controlFlow());
+
+            if(event != null && event.canBeBusy()){
+                socket.on(eventName, event.controlFlow());
+            }
 
             return true;
         }
