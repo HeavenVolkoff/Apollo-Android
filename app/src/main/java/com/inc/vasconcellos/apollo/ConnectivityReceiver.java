@@ -5,11 +5,13 @@ import android.content.Context;
 import android.content.Intent;
 import android.net.ConnectivityManager;
 import android.net.NetworkInfo;
+import android.os.Bundle;
 import android.util.Log;
 
-import java.util.concurrent.ConcurrentLinkedQueue;
 
 public class ConnectivityReceiver extends BroadcastReceiver {
+    public static final String TAG = ConnectivityReceiver.class.getSimpleName();
+
     private Runnable onConnected;
     private Runnable onDisconnected;
     private Boolean busy;
@@ -23,7 +25,7 @@ public class ConnectivityReceiver extends BroadcastReceiver {
 
     @Override
     public void onReceive(Context context, Intent intent) {
-        Log.d(ConnectivityReceiver.class.getSimpleName(), "action: " + intent.getAction() + " " + intent.getDataString() + " " + intent.getExtras().toString() );
+        debugIntent(intent, TAG);
         if(!busy){
             busy = true;
 
@@ -35,6 +37,21 @@ public class ConnectivityReceiver extends BroadcastReceiver {
         }
 
         busy = false;
+    }
+
+    private void debugIntent(Intent intent, String tag) {
+        Log.v(tag, "action: " + intent.getAction());
+        Log.v(tag, "component: " + intent.getComponent());
+        Bundle extras = intent.getExtras();
+        if (extras != null) {
+            for (String key: extras.keySet()) {
+                Log.v(tag, "key [" + key + "]: " +
+                        extras.get(key));
+            }
+        }
+        else {
+            Log.v(tag, "no extras");
+        }
     }
 
     public boolean isNetworkAvailable(Context context) {

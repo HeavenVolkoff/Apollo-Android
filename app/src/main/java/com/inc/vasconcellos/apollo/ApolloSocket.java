@@ -1,10 +1,12 @@
 package com.inc.vasconcellos.apollo;
 
 import android.content.IntentFilter;
+import android.net.ConnectivityManager;
 import android.util.Log;
 
 import com.github.nkzawa.emitter.Emitter;
 import com.github.nkzawa.socketio.client.IO;
+import com.github.nkzawa.socketio.client.Manager;
 import com.github.nkzawa.socketio.client.Socket;
 
 import java.net.URISyntaxException;
@@ -16,40 +18,28 @@ public class ApolloSocket {
     public static final String TAG = "ApolloSocket";
 
     //Internal Socket Management
+    private Boolean disconnecting;
+    private Boolean connecting;
     private Socket socket;
     private ConnectivityReceiver connectivityReceiver;
     private HashMap<String, ApolloEvent> events;
 
     public ApolloSocket(String url, String[] events) throws URISyntaxException{
 
-        //Initialize Connection Receiver
-        connectivityReceiver = new ConnectivityReceiver(
-                new Runnable() {
-                    @Override
-                    public void run() {
-                        Log.i(ApolloSocket.TAG, "Network Enable, Reconnecting Socket...");
+        Log.d(TAG, "Instantiating ApolloSocket");
 
-                        if(!ApolloSocket.this.socket.connected()){
-                            ApolloSocket.this.socket.connect();
-                        }
-                    }
-                },
-                new Runnable() {
-                    @Override
-                    public void run() {
-                        Log.i(ApolloSocket.TAG, "Network Disable, Disconnecting Socket.");
-
-                        ApolloSocket.this.socket.disconnect();
-                    }
-                }
-        );
-        //Register Connection Receiver to CONNECTIVITY_CHANGE Event
-        App.instance().registerReceiver(connectivityReceiver, new IntentFilter("android.net.conn.CONNECTIVITY_CHANGE"));
+        //Initialize Variables
+        disconnecting = false;
+        connecting = false;
 
         try{
-            socket = IO.socket(url);
-            //Max Reconnection attempts
-            socket.io().reconnectionAttempts(20);
+            //Socket Options
+            IO.Options opts = new IO.Options();
+            opts.forceNew = false;
+            opts.reconnectionAttempts = 20;
+
+            //Initialize Socket from manager
+            socket = IO.socket(url, opts);
 
         } catch (URISyntaxException e) {
             Log.e(TAG, "Error Parsing URL: " + url);
@@ -73,16 +63,81 @@ public class ApolloSocket {
         for (String event : events){
             this.events.put(event, new ApolloEvent(event));
         }
+
+        //Connected Listener
+        on(Socket.EVENT_CONNECT, new Emitter.Listener() {
+            @Override
+            public void call(Object... args) {
+                ApolloSocket.this.connecting = false;
+            }
+        }, false);
+
+        //Disconnect Listener
+        on(Socket.EVENT_DISCONNECT, new Emitter.Listener() {
+            @Override
+            public void call(Object... args) {
+                ApolloSocket.this.disconnecting = false;
+            }
+        }, false);
+
+        //Initialize Connection Receiver
+        connectivityReceiver = new ConnectivityReceiver(
+                new Runnable() {
+                    @Override
+                    public void run() {
+                        if(!ApolloSocket.this.isConnected() && !ApolloSocket.this.isConnecting()){
+                            Log.d(ConnectivityReceiver.TAG, "Network Enable, Reconnecting Socket...");
+                            ApolloSocket.this.socket.io().reconnectionAttempts(20);
+                            ApolloSocket.this.socket.io().open(new Manager.OpenCallback() {
+                                @Override
+                                public void call(Exception err) {
+                                    if (err == null) {
+                                        ApolloSocket.this.connect();
+                                    } else {
+                                        err.printStackTrace();
+                                    }
+                                }
+                            });
+                        }
+                    }
+                },
+                new Runnable() {
+                    @Override
+                    public void run() {
+                        if(!ApolloSocket.this.isDisconnecting()){
+                            ApolloSocket.this.disconnecting = true;
+
+                            ApolloSocket.this.on(Socket.EVENT_RECONNECT_FAILED, new Emitter.Listener() {
+                                @Override
+                                public void call(Object... args) {
+                                    if(!ApolloSocket.this.isNetworkAvailable()){
+                                        Log.d(ConnectivityReceiver.TAG, "Network Disable, Disconnecting Socket...");
+                                        ApolloSocket.this.disconnect();
+                                    }else{
+                                        ApolloSocket.this.disconnecting = false;
+                                    }
+                                }
+                            }, true);
+                            ApolloSocket.this.socket.io().reconnectionAttempts(1);
+                        }
+                    }
+                }
+        );
+
+        //Register Connection Receiver to CONNECTIVITY_CHANGE Event
+        App.instance().registerReceiver(connectivityReceiver, new IntentFilter(ConnectivityManager.CONNECTIVITY_ACTION));
     }
 
     //Public Methods
     public void connect(){
         if(isNetworkAvailable()){
+            connecting = true;
             socket.connect();
         }
     }
 
     public void disconnect(){
+        disconnecting = true;
         socket.disconnect();
     }
 
@@ -147,5 +202,13 @@ public class ApolloSocket {
 
     public Boolean isConnected() {
         return socket.connected();
+    }
+
+    public Boolean isConnecting() {
+        return connecting;
+    }
+
+    public Boolean isDisconnecting() {
+        return disconnecting;
     }
 }

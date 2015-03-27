@@ -134,7 +134,11 @@ public class Login extends ActionBarActivity implements View.OnClickListener {
                     @Override
                     public void run() {
                         Log.i(ApolloSocket.TAG, "Reconnection Failed");
-                        connectionStatus.setText(R.string.connectionError);
+                        if(!apollo.isNetworkAvailable()){
+                            connectionStatus.setText(R.string.connectionNoInternet);
+                        }else{
+                            connectionStatus.setText(R.string.connectionError);
+                        }
                         connectionStatus.setTextColor(getResources().getColor(R.color.material_red_700));
 
                         if(android.os.Build.VERSION.SDK_INT > Build.VERSION_CODES.LOLLIPOP){

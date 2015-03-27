@@ -15,5 +15,6 @@
     <string name="connected">Conectado</string>
     <string name="reconnecting">Reconectando…</string>
     <string name="connectionError">Error de Conexão</string>
+    <string name="connectionNoInternet">Sem Conexão com a Internet</string>
     <string name="connectionLogo">Logo representando a conexão</string>
 </resources>

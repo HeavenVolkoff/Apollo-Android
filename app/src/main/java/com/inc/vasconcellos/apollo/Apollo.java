@@ -41,7 +41,7 @@ public class Apollo{
 
     /**
      * Socket Abstraction
-     * - This is something that I came up with to *try* emulate magic methods on java
+     * - This is something that I came up with to *try* facilitate the events access
      */
     public class SocketAbstraction {
         private Integer type;
