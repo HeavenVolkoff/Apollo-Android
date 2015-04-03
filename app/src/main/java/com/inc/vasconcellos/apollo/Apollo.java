@@ -1,12 +1,5 @@
 package com.inc.vasconcellos.apollo;
 
-import android.content.Context;
-import android.content.IntentFilter;
-import android.net.ConnectivityManager;
-import android.net.NetworkInfo;
-import android.nfc.Tag;
-import android.util.Log;
-
 import com.github.nkzawa.emitter.Emitter;
 import com.github.nkzawa.socketio.client.Socket;
 
@@ -133,7 +126,7 @@ public class Apollo{
 
         //Initialize ApolloSocket
         try{
-            socket = new ApolloSocket(SERVER_ADDRESS, new String[] {LOGIN, PROCESS_INFO, PROCESS_PIECE, PROCESS_INFO});
+            socket = new ApolloSocket_OLD(SERVER_ADDRESS, new String[] {LOGIN, PROCESS_INFO, PROCESS_PIECE, PROCESS_INFO});
         }catch (URISyntaxException e){
             //Should Never Happen, But in case it happens we have nothing to do otherwise exit;//TODO: Display a error Message to User Than Exit
             e.printStackTrace();

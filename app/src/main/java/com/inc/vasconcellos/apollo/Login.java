@@ -87,7 +87,7 @@ public class Login extends Activity implements View.OnClickListener {
                 runOnUiThread(new Runnable() {
                     @Override
                     public void run() {
-                        Log.i(ApolloSocket.TAG, "Successfully Connected");
+                        Log.i(ApolloSocket_OLD.TAG, "Successfully Connected");
                         connectionStatus.setText(R.string.connected);
                         connectionStatus.setTextColor(getResources().getColor(R.color.material_green_700));
 
@@ -110,7 +110,7 @@ public class Login extends Activity implements View.OnClickListener {
                 runOnUiThread(new Runnable() {
                     @Override
                     public void run() {
-                        Log.i(ApolloSocket.TAG, "Reconnection Attempt number: " + args[0].toString());
+                        Log.i(ApolloSocket_OLD.TAG, "Reconnection Attempt number: " + args[0].toString());
                         connectionStatus.setText(R.string.reconnecting);
                         connectionStatus.setTextColor(getResources().getColor(R.color.material_yellow_700));
 
@@ -133,7 +133,7 @@ public class Login extends Activity implements View.OnClickListener {
                 runOnUiThread(new Runnable() {
                     @Override
                     public void run() {
-                        Log.i(ApolloSocket.TAG, "Reconnection Failed");
+                        Log.i(ApolloSocket_OLD.TAG, "Reconnection Failed");
                         if(!apollo.isNetworkAvailable()){
                             connectionStatus.setText(R.string.connectionNoInternet);
                         }else{
