@@ -1,7 +1,7 @@
 package com.inc.vasconcellos.apollo;
 
+import android.app.Activity;
 import android.os.Build;
-import android.support.v7.app.ActionBarActivity;
 import android.os.Bundle;
 import android.util.Log;
 import android.view.Menu;
@@ -20,7 +20,7 @@ import com.pnikosis.materialishprogress.ProgressWheel;
 
 
 
-public class Login extends ActionBarActivity implements View.OnClickListener {
+public class Login extends Activity implements View.OnClickListener {
 
     public static final String TAG = Login.class.getSimpleName();
 
