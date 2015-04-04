@@ -1,26 +1,28 @@
 package com.inc.vasconcellos.apollo;
 
 import android.app.Activity;
-import android.os.Build;
 import android.os.Bundle;
+import android.support.annotation.NonNull;
+import android.support.annotation.Nullable;
 import android.util.Log;
 import android.view.Menu;
 import android.view.View;
 import android.widget.Button;
 import android.widget.EditText;
 import android.widget.ImageView;
-import android.widget.TextView;
 
 import com.github.nkzawa.emitter.Emitter;
 import com.nispok.snackbar.Snackbar;
 import com.nispok.snackbar.SnackbarManager;
 import com.nispok.snackbar.enums.SnackbarType;
 import com.nispok.snackbar.listeners.ActionClickListener;
+import com.nispok.snackbar.listeners.EventListener;
+import com.nispok.snackbar.listeners.EventListenerAdapter;
 import com.pnikosis.materialishprogress.ProgressWheel;
 
 
 
-public class Login extends Activity implements View.OnClickListener {
+public class Login extends Activity{
 
     public static final String TAG = Login.class.getSimpleName();
 
@@ -28,8 +30,8 @@ public class Login extends Activity implements View.OnClickListener {
     private EditText username;
     private EditText password;
     private ProgressWheel progressWheel;
-    private ImageView connectionIcon;
-    private TextView connectionStatus;
+
+    private String currentSnackbar;
     
     private Apollo apollo;
 
@@ -38,11 +40,15 @@ public class Login extends Activity implements View.OnClickListener {
     private Emitter.Listener connectListener;
     private Emitter.Listener reconnectingListener;
     private Emitter.Listener reconnectFailedListener;
+    private Emitter.Listener networkOfflineListener;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_login);
+
+        //Initialize Variables
+        currentSnackbar = null;
 
         //Initialize self reference
         apollo = Apollo.getInstance();
@@ -53,15 +59,36 @@ public class Login extends Activity implements View.OnClickListener {
 
         //Initialize Button and set it's listener to this
         loginButton = (Button) findViewById(R.id.loginButton);
-        loginButton.setOnClickListener(this);
+        loginButton.setOnClickListener(new View.OnClickListener(){
+            @Override
+            public void onClick(View v) {
+                runOnUiThread(new Runnable() {
+                    @Override
+                    public void run() {
+                        if(apollo.isConnected() && !apollo.isLogged()){
+                            String username = Login.this.username.getText().toString();
+                            String password = Login.this.password.getText().toString();
+
+                            if (username.length() > 0 && password.length() > 0) {
+                                Login.this.username.setVisibility(View.GONE);
+                                Login.this.password.setVisibility(View.GONE);
+                                Login.this.loginButton.setVisibility(View.GONE);
+                                Login.this.progressWheel.setVisibility(View.VISIBLE);
+
+                                apollo.login(username, password);
+                                Log.d(TAG, "Emitted Login Event to Server");
+                            }else{
+                                showSnackbar("failedLogin");
+                            }
+                        }
+                    }
+                });
+            }
+        });
 
         //Initialize Form fields
         username = (EditText) findViewById(R.id.loginUsername);
         password = (EditText) findViewById(R.id.loginPassword);
-
-        //Initialize Connection Status Fields
-        connectionStatus = (TextView) findViewById(R.id.connectionStatus);
-        connectionIcon = (ImageView) findViewById(R.id.connectionImage);
 
         //Initialize Spinner Bar
         progressWheel = (ProgressWheel) findViewById(R.id.progressWheel);
@@ -87,17 +114,7 @@ public class Login extends Activity implements View.OnClickListener {
                 runOnUiThread(new Runnable() {
                     @Override
                     public void run() {
-                        Log.i(ApolloSocket_OLD.TAG, "Successfully Connected");
-                        connectionStatus.setText(R.string.connected);
-                        connectionStatus.setTextColor(getResources().getColor(R.color.material_green_700));
-
-                        if(android.os.Build.VERSION.SDK_INT > Build.VERSION_CODES.LOLLIPOP){
-                            //Lollipop (API >= 21) Only Methods
-                            connectionIcon.setBackground(getApplicationContext().getDrawable(R.drawable.ic_sync_green_18dp));
-                        }else{
-                            //API < 21
-                            connectionIcon.setBackgroundDrawable(getApplicationContext().getResources().getDrawable(R.drawable.ic_sync_green_18dp));
-                        }
+                        SnackbarManager.dismiss();
                     }
                 });
             }
@@ -110,17 +127,7 @@ public class Login extends Activity implements View.OnClickListener {
                 runOnUiThread(new Runnable() {
                     @Override
                     public void run() {
-                        Log.i(ApolloSocket_OLD.TAG, "Reconnection Attempt number: " + args[0].toString());
-                        connectionStatus.setText(R.string.reconnecting);
-                        connectionStatus.setTextColor(getResources().getColor(R.color.material_yellow_700));
-
-                        if(android.os.Build.VERSION.SDK_INT > Build.VERSION_CODES.LOLLIPOP){
-                            //Lollipop (API >= 21) Only Methods
-                            connectionIcon.setBackground(getApplicationContext().getDrawable(R.drawable.ic_warning_amber_18dp));
-                        }else{
-                            //API < 21
-                            connectionIcon.setBackgroundDrawable(getApplicationContext().getResources().getDrawable(R.drawable.ic_warning_amber_18dp));
-                        }
+                        showSnackbar("reconnecting");
                     }
                 });
             }
@@ -133,21 +140,20 @@ public class Login extends Activity implements View.OnClickListener {
                 runOnUiThread(new Runnable() {
                     @Override
                     public void run() {
-                        Log.i(ApolloSocket_OLD.TAG, "Reconnection Failed");
-                        if(!apollo.isNetworkAvailable()){
-                            connectionStatus.setText(R.string.connectionNoInternet);
-                        }else{
-                            connectionStatus.setText(R.string.connectionError);
-                        }
-                        connectionStatus.setTextColor(getResources().getColor(R.color.material_red_700));
+                        showSnackbar("reconnectingFailed");
+                    }
+                });
+            }
+        };
 
-                        if(android.os.Build.VERSION.SDK_INT > Build.VERSION_CODES.LOLLIPOP){
-                            //Lollipop (API >= 21) Only Methods
-                            connectionIcon.setBackground(getApplicationContext().getDrawable(R.drawable.ic_error_red_18dp));
-                        }else{
-                            //API < 21
-                            connectionIcon.setBackgroundDrawable(getApplicationContext().getResources().getDrawable(R.drawable.ic_error_red_18dp));
-                        }
+        //Network Offline Listener
+        networkOfflineListener = new Emitter.Listener(){
+            @Override
+            public void call(Object... args) {
+                runOnUiThread(new Runnable() {
+                    @Override
+                    public void run() {
+                        showSnackbar("networkOffline");
                     }
                 });
             }
@@ -158,9 +164,33 @@ public class Login extends Activity implements View.OnClickListener {
         apollo.on().connect(connectListener);
         apollo.on().reconnecting(reconnectingListener);
         apollo.on().reconnectFailed(reconnectFailedListener);
+        apollo.on().networkOffline(networkOfflineListener);
 
         //Connect
         apollo.connect();
+
+        //Restore Activity state if restarted by system
+        if(savedInstanceState != null){
+            restorePreviousState(
+                    apollo.isLogged(),
+                    apollo.busy().login(),
+                    savedInstanceState.getString("currentSnackbar")
+            );
+        }
+    }
+
+    @Override
+    public boolean onCreateOptionsMenu(Menu menu) {
+        // Inflate the menu; this adds items to the action bar if it is present.
+        getMenuInflater().inflate(R.menu.menu_login, menu);
+        return true;
+    }
+
+    @Override
+    protected void onSaveInstanceState(@NonNull Bundle savedInstanceState) {
+        super.onRestoreInstanceState(savedInstanceState);
+
+        savedInstanceState.putString("currentSnackbar", this.currentSnackbar);
     }
 
     @Override
@@ -170,9 +200,10 @@ public class Login extends Activity implements View.OnClickListener {
         apollo.off().connect(connectListener);
         apollo.off().reconnecting(reconnectingListener);
         apollo.off().reconnectFailed(reconnectFailedListener);
+        apollo.off().networkOffline(networkOfflineListener);
     }
 
-    public void onLoginReceived(boolean loggedIn){
+    private void onLoginReceived(boolean loggedIn){
         //Dismiss Progress Wheel
         progressWheel.setVisibility(View.GONE);
 
@@ -185,51 +216,85 @@ public class Login extends Activity implements View.OnClickListener {
             password.setVisibility(View.VISIBLE);
             loginButton.setVisibility(View.VISIBLE);
 
-            showErrorMsg();
+            showSnackbar("failedLogin");
         }
     }
 
-    public void showErrorMsg(){
-        SnackbarManager.show(
-                Snackbar.with(getApplicationContext())
-                        .type(SnackbarType.MULTI_LINE) // Set is as a multi-line snackbar
-                        .color(getResources().getColor(R.color.material_red_700)) //change the background color
+    private void restorePreviousState(Boolean logged, Boolean isLoggingIn, @Nullable String snackbar){
+        if(logged || isLoggingIn){
+            username.setVisibility(View.GONE);
+            password.setVisibility(View.GONE);
+            loginButton.setVisibility(View.GONE);
+
+            if(isLoggingIn){
+                this.progressWheel.setVisibility(View.VISIBLE);
+            }
+        }
+
+        if(snackbar != null){
+            Log.d(TAG, "restoring snackbar, key: " + snackbar);
+            showSnackbar(snackbar);
+        }
+    }
+
+    private void showSnackbar(@NonNull String key){
+        if(key.equals(currentSnackbar)){
+            return;
+        }
+
+        Snackbar snack = null;
+        EventListener dismiss = new EventListenerAdapter() {
+            @Override
+            public void onDismiss(Snackbar snackbar) {
+                super.onDismiss(snackbar);
+                Login.this.currentSnackbar = null;
+            }
+        };
+
+        switch (key){
+            case "failedLogin":
+                snack = Snackbar.with(getApplicationContext())
+                        .type(SnackbarType.MULTI_LINE)
+                        .color(getResources().getColor(R.color.material_red_700))
                         .text(R.string.failedLogin)
-                        .duration(Snackbar.SnackbarDuration.LENGTH_INDEFINITE) //change display time to indefinite
-                        .actionLabel(R.string.close) // action button label
+                        .duration(Snackbar.SnackbarDuration.LENGTH_INDEFINITE)
+                        .actionLabel(R.string.close)
                         .actionListener(new ActionClickListener() {
                             @Override
                             public void onActionClicked(Snackbar snackbar) {
                                 snackbar.dismiss();
                             }
-                        }), this);
-    }
+                        }).eventListener(dismiss);
+                break;
+            case "reconnecting":
+                snack = Snackbar.with(getApplicationContext())
+                        .color(getResources().getColor(R.color.material_yellow_700))
+                        .text(R.string.reconnecting)
+                        .duration(Snackbar.SnackbarDuration.LENGTH_INDEFINITE)
+                        .swipeToDismiss(false)
+                        .eventListener(dismiss);
+                break;
+            case "reconnectFailed":
+                snack = Snackbar.with(getApplicationContext())
+                        .color(getResources().getColor(R.color.material_red_700))
+                        .text(R.string.connectionError)
+                        .duration(Snackbar.SnackbarDuration.LENGTH_INDEFINITE)
+                        .swipeToDismiss(false)
+                        .eventListener(dismiss);
+                break;
+            case "networkOffline":
+                snack = Snackbar.with(getApplicationContext())
+                        .color(getResources().getColor(R.color.material_red_700))
+                        .text(R.string.noInternetConnection)
+                        .duration(Snackbar.SnackbarDuration.LENGTH_INDEFINITE)
+                        .swipeToDismiss(false)
+                        .eventListener(dismiss);
+                break;
+        }
 
-    @Override
-    public boolean onCreateOptionsMenu(Menu menu) {
-        // Inflate the menu; this adds items to the action bar if it is present.
-        getMenuInflater().inflate(R.menu.menu_login, menu);
-        return true;
-    }
-
-    //Login Button Click Listener
-    @Override
-    public void onClick(View v) {
-        if(apollo.isConnected() && !apollo.isLogged()){
-            String username = this.username.getText().toString();
-            String password = this.password.getText().toString();
-
-            if (username.length() > 0 && password.length() > 0) {
-                this.username.setVisibility(View.GONE);
-                this.password.setVisibility(View.GONE);
-                this.loginButton.setVisibility(View.GONE);
-                this.progressWheel.setVisibility(View.VISIBLE);
-
-                apollo.emit().login(username, password);
-                Log.d(TAG, "Emitted Login Event to Server");
-            }else{
-                showErrorMsg();
-            }
+        if(snack != null){
+            this.currentSnackbar = key;
+            SnackbarManager.show(snack, this);
         }
     }
 }

@@ -7,13 +7,10 @@ import android.util.Log;
 
 import com.github.nkzawa.emitter.Emitter;
 import com.github.nkzawa.socketio.client.On;
-import com.github.nkzawa.socketio.client.Socket;
 import com.github.nkzawa.socketio.client.SocketIOException;
 import com.github.nkzawa.socketio.parser.Packet;
 import com.github.nkzawa.socketio.parser.Parser;
 import com.github.nkzawa.thread.EventThread;
-
-import org.java_websocket.WebSocket;
 
 import java.net.URI;
 import java.util.ArrayList;
@@ -30,12 +27,16 @@ import java.util.concurrent.TimeUnit;
 
 import javax.net.ssl.SSLContext;
 
-public class ApolloSocketManager extends Emitter {
+public class SocketManager extends Emitter {
 
-    public static final String TAG = "ApolloSocketManager"; 
+    public static final String TAG = SocketManager.class.getSimpleName();
 
     /*package*/ enum ConnectionState {
         CLOSED, CLOSING, OPENING, OPEN, RECONNECTING
+    }
+
+    /*package*/ enum NetworkState {
+        ENABLE, DISABLE
     }
 
     public static interface OpenCallback {
@@ -107,20 +108,19 @@ public class ApolloSocketManager extends Emitter {
     public static final String EVENT_TRANSPORT = Engine.EVENT_TRANSPORT;
 
 
-    private static SSLContext defaultSSLContext;
+    /*package*/ static SSLContext defaultSSLContext;
 
     /*package*/ ConnectionState connectionState = null;
 
     private boolean canReconnect;
     private boolean skipReconnect;
     private boolean encoding;
-    private boolean openReconnect;
     private int reconnectionAttempts;
     private int attempt;
     private long reconnectionDelay;
     private long reconnectionDelayMax;
     private long timeout;
-    private Set<ApolloSocket> connected;
+    private Set<Socket> connected;
     private URI uri;
     private List<Packet> packetBuffer;
     private Queue<On.Handle> subs;
@@ -129,30 +129,31 @@ public class ApolloSocketManager extends Emitter {
     private Parser.Encoder encoder;
     private Parser.Decoder decoder;
     private ConnectivityReceiver connectivityReceiver;
+    private NetworkState networkState;
     private Context context;
 
     /**
      * This HashMap can be accessed from outside of EventThread.
      */
-    private ConcurrentHashMap<String, ApolloSocket> nsps;
+    private ConcurrentHashMap<String, Socket> nsps;
 
     private ScheduledExecutorService timeoutScheduler;
     private ScheduledExecutorService reconnectScheduler;
 
 
-    public ApolloSocketManager(Context context) {
+    public SocketManager(Context context) {
         this(context, null, null);
     }
 
-    public ApolloSocketManager(Context context, URI uri) {
+    public SocketManager(Context context, URI uri) {
         this(context, uri, null);
     }
 
-    public ApolloSocketManager(Context context, Options opts) {
+    public SocketManager(Context context, Options opts) {
         this(context, null, opts);
     }
 
-    public ApolloSocketManager(Context context, URI uri, Options opts) {
+    public SocketManager(Context context, URI uri, Options opts) {
         if (opts == null) {
             opts = new Options();
         }
@@ -171,11 +172,12 @@ public class ApolloSocketManager extends Emitter {
         this.setReconnectionDelayMax(opts.reconnectionDelayMax != 0 ? opts.reconnectionDelayMax : 5000);
         this.setTimeout(opts.timeout < 0 ? 20000 : opts.timeout);
         this.connectionState = ConnectionState.CLOSED;
+        this.networkState = ConnectivityReceiver.isNetworkAvailable(context)? NetworkState.ENABLE : NetworkState.DISABLE;
         this.uri = uri;
-        this.connected = new HashSet<ApolloSocket>();
+        this.connected = new HashSet<>();
         this.attempt = 0;
         this.encoding = false;
-        this.packetBuffer = new ArrayList<Packet>();
+        this.packetBuffer = new ArrayList<>();
         this.encoder = new Parser.Encoder();
         this.decoder = new Parser.Decoder();
         this.context = context;
@@ -185,34 +187,46 @@ public class ApolloSocketManager extends Emitter {
                 new Runnable() {
                     @Override
                     public void run() {
-                        if(ApolloSocketManager.this.connectionState != ConnectionState.OPEN &&
-                                ApolloSocketManager.this.connectionState != ConnectionState.OPENING &&
-                                    ApolloSocketManager.this.connectionState != ConnectionState.RECONNECTING){
+                        if(SocketManager.this.connectionState != ConnectionState.OPEN &&
+                                SocketManager.this.connectionState != ConnectionState.OPENING &&
+                                    SocketManager.this.connectionState != ConnectionState.RECONNECTING){
+                            SocketManager.this.connectionState = ConnectionState.OPENING;
+                            SocketManager.this.networkState = NetworkState.ENABLE;
+
                             Log.d(ConnectivityReceiver.TAG, "Network Enabled, Reconnecting Socket Manager...");
-                            ApolloSocketManager.this.emit(ApolloSocketManager.EVENT_NETWORK_ONLINE);
-                            ApolloSocketManager.this.connectionState = ConnectionState.OPENING;
-                            ApolloSocketManager.this.open();
+
+                            SocketManager.this.emitAll(SocketManager.EVENT_NETWORK_ONLINE);
+                            SocketManager.this.open();
                         }
                     }
                 },
                 new Runnable() {
                     @Override
                     public void run() {
-                        if(ApolloSocketManager.this.connectionState != ConnectionState.CLOSED &&
-                                ApolloSocketManager.this.connectionState != ConnectionState.CLOSING){
+                        if(SocketManager.this.connectionState != ConnectionState.CLOSED &&
+                                SocketManager.this.connectionState != ConnectionState.CLOSING){
+                            SocketManager.this.connectionState = ConnectionState.CLOSING;
+                            SocketManager.this.networkState = NetworkState.DISABLE;
+
                             Log.d(ConnectivityReceiver.TAG, "Network Disable, Disconnecting Socket Manager...");
-                            ApolloSocketManager.this.emit(ApolloSocketManager.EVENT_NETWORK_OFFLINE);
-                            ApolloSocketManager.this.connectionState = ConnectionState.CLOSING;
-                            ApolloSocketManager.this.close();
+
+                            SocketManager.this.emitAll(SocketManager.EVENT_NETWORK_OFFLINE);
+                            SocketManager.this.close();
                         }
                     }
                 }
         );
     }
 
+    /**
+     * Emit Event for Socket Manager and all Sockets in Queue
+     *
+     * @param event = Event Name
+     * @param args = Event Arguments
+     */
     private void emitAll(String event, Object... args) {
         this.emit(event, args);
-        for (ApolloSocket socket : this.nsps.values()) {
+        for (Socket socket : this.nsps.values()) {
             socket.emit(event, args);
         }
     }
@@ -223,36 +237,52 @@ public class ApolloSocketManager extends Emitter {
      * @param fn callback.
      * @return a reference to this object.
      */
-    public ApolloSocketManager open(final OpenCallback fn) {
+    public SocketManager open(final OpenCallback fn) {
         EventThread.exec(new Runnable() {
             @Override
             public void run() {
-                Log.v(TAG, "ConnectionState " + ApolloSocketManager.this.connectionState);
+                // Register Connectivity Receiver to Connectivity Action Android Intent
+                SocketManager.this.connectivityReceiver.registerReciver(SocketManager.this.context);
 
-                if (ApolloSocketManager.this.connectionState == ConnectionState.OPEN) {
+                if (SocketManager.this.connectionState == ConnectionState.OPEN) {
+                    if (fn != null) {
+                        fn.call(null);
+                    }
+
                     return;
 
-                }else if(ApolloSocketManager.this.connectionState != ConnectionState.RECONNECTING){
-                    Log.v(TAG, "Opening connection to " + ApolloSocketManager.this.uri);
+                }else if (!SocketManager.this.isNetworkEnable()){
+                    Log.d(TAG, "Network Disabled, will open connection to " + SocketManager.this.uri + " when network is enabled");
+
+                    if (fn != null) {
+                        fn.call(new SocketIOException("Network Disabled"));
+                    }
+
+                    SocketManager.this.emitAll(SocketManager.EVENT_NETWORK_OFFLINE);
+
+                    return;
+
+                }else if(SocketManager.this.connectionState != ConnectionState.RECONNECTING){
+                    Log.v(TAG, "Opening connection to " + SocketManager.this.uri);
 
                     connectionState = ConnectionState.OPENING;
                 }
 
                 skipReconnect = false;
-                engine = new Engine(ApolloSocketManager.this.uri, ApolloSocketManager.this.opts);
+                engine = new Engine(SocketManager.this.uri, SocketManager.this.opts);
 
                 // propagate transport event.
                 engine.on(Engine.EVENT_TRANSPORT, new Listener() {
                     @Override
                     public void call(Object... args) {
-                        ApolloSocketManager.this.emit(ApolloSocketManager.EVENT_TRANSPORT, args);
+                        SocketManager.this.emit(SocketManager.EVENT_TRANSPORT, args);
                     }
                 });
 
-                final On.Handle openSub = On.on(ApolloSocketManager.this.engine, Engine.EVENT_OPEN, new Listener() {
+                final On.Handle openSub = On.on(SocketManager.this.engine, Engine.EVENT_OPEN, new Listener() {
                     @Override
                     public void call(Object... objects) {
-                        ApolloSocketManager.this.onConnectionOpen();
+                        SocketManager.this.onConnectionOpen();
 
                         if (fn != null) {
                             fn.call(null);
@@ -260,28 +290,28 @@ public class ApolloSocketManager extends Emitter {
                     }
                 });
 
-                On.Handle errorSub = On.on(ApolloSocketManager.this.engine, Engine.EVENT_ERROR, new Listener() {
+                On.Handle errorSub = On.on(SocketManager.this.engine, Engine.EVENT_ERROR, new Listener() {
                     @Override
                     public void call(Object... objects) {
                         Object data = objects.length > 0 ? objects[0] : null;
 
-                        ApolloSocketManager.this.onConnectionError(data);
+                        SocketManager.this.onConnectionError(data);
 
                         if (fn != null) {
                             fn.call(new SocketIOException("Connection error",
                                     data instanceof Exception ? (Exception) data : null));
                         }
 
-                        if (canReconnect && connectionState != ConnectionState.RECONNECTING) {
+                        if (SocketManager.this.canReconnect && SocketManager.this.connectionState != ConnectionState.RECONNECTING) {
                             Log.i(TAG, "Connection Failed, will attempt to reconnect");
-                            attempt = 0;
-                            ApolloSocketManager.this.reconnect();
+                            SocketManager.this.attempt = 0;
+                            SocketManager.this.reconnect();
                         }
                     }
                 });
 
-                if (ApolloSocketManager.this.timeout >= 0) {
-                    Log.v(TAG, "Connection attempt will timeout after " + ApolloSocketManager.this.timeout);
+                if (SocketManager.this.timeout >= 0) {
+                    Log.v(TAG, "Connection attempt will timeout after " + SocketManager.this.timeout);
 
                     final Future timer = getTimeoutScheduler().schedule(new Runnable() {
                         @Override
@@ -289,19 +319,19 @@ public class ApolloSocketManager extends Emitter {
                             EventThread.exec(new Runnable() {
                                 @Override
                                 public void run() {
-                                    Log.v(TAG, "Connect attempt timed out after " + ApolloSocketManager.this.timeout);
+                                    Log.v(TAG, "Connect attempt timed out after " + SocketManager.this.timeout);
 
                                     openSub.destroy();
 
-                                    ApolloSocketManager.this.engine.close();
-                                    ApolloSocketManager.this.engine.emit(Engine.EVENT_ERROR, new SocketIOException("timeout"));
-                                    ApolloSocketManager.this.emitAll(EVENT_CONNECT_TIMEOUT, ApolloSocketManager.this.timeout);
+                                    SocketManager.this.engine.close();
+                                    SocketManager.this.engine.emit(Engine.EVENT_ERROR, new SocketIOException("timeout"));
+                                    SocketManager.this.emitAll(EVENT_CONNECT_TIMEOUT, SocketManager.this.timeout);
                                 }
                             });
                         }
-                    }, ApolloSocketManager.this.timeout, TimeUnit.MILLISECONDS);
+                    }, SocketManager.this.timeout, TimeUnit.MILLISECONDS);
 
-                    ApolloSocketManager.this.subs.add(new On.Handle() {
+                    SocketManager.this.subs.add(new On.Handle() {
                         @Override
                         public void destroy() {
                             timer.cancel(false);
@@ -309,10 +339,10 @@ public class ApolloSocketManager extends Emitter {
                     });
                 }
 
-                ApolloSocketManager.this.subs.add(openSub);
-                ApolloSocketManager.this.subs.add(errorSub);
+                SocketManager.this.subs.add(openSub);
+                SocketManager.this.subs.add(errorSub);
 
-                ApolloSocketManager.this.engine.open();
+                SocketManager.this.engine.open();
             }
         });
 
@@ -322,7 +352,7 @@ public class ApolloSocketManager extends Emitter {
     /**
      * Overload Open Function
      */
-    public ApolloSocketManager open(){
+    public SocketManager open(){
         return open(null);
     }
 
@@ -338,45 +368,42 @@ public class ApolloSocketManager extends Emitter {
         this.emit(EVENT_OPEN);
 
         this.subs.add(
-                On.on(ApolloSocketManager.this.engine, Engine.EVENT_DATA, new Listener() {
+                On.on(SocketManager.this.engine, Engine.EVENT_DATA, new Listener() {
                     @Override
                     public void call(Object... objects) {
                         Object data = objects[0];
                         if (data instanceof String) {
-                            ApolloSocketManager.this.onData((String) data);
+                            SocketManager.this.onData((String) data);
                         } else if (data instanceof byte[]) {
-                            ApolloSocketManager.this.onData((byte[]) data);
+                            SocketManager.this.onData((byte[]) data);
                         }
                     }
                 })
         );
         this.subs.add(
-                On.on(ApolloSocketManager.this.decoder, Parser.Decoder.EVENT_DECODED, new Listener() {
+                On.on(SocketManager.this.decoder, Parser.Decoder.EVENT_DECODED, new Listener() {
                     @Override
                     public void call(Object... objects) {
-                        ApolloSocketManager.this.onDecoded((Packet) objects[0]);
+                        SocketManager.this.onDecoded((Packet) objects[0]);
                     }
                 })
         );
         this.subs.add(
-                On.on(ApolloSocketManager.this.engine, Engine.EVENT_ERROR, new Listener() {
+                On.on(SocketManager.this.engine, Engine.EVENT_ERROR, new Listener() {
                     @Override
                     public void call(Object... objects) {
-                        ApolloSocketManager.this.onError((Exception) objects[0]);
+                        SocketManager.this.onError((Exception) objects[0]);
                     }
                 })
         );
         this.subs.add(
-                On.on(ApolloSocketManager.this.engine, Engine.EVENT_CLOSE, new Listener() {
+                On.on(SocketManager.this.engine, Engine.EVENT_CLOSE, new Listener() {
                     @Override
                     public void call(Object... objects) {
-                        ApolloSocketManager.this.onConnectionClose((String) objects[0]);
+                        SocketManager.this.onConnectionClose((String) objects[0]);
                     }
                 })
         );
-
-        // Register Connectivity Receiver to Connectivity Action Android Intent
-        this.context.registerReceiver(this.connectivityReceiver, new IntentFilter(ConnectivityManager.CONNECTIVITY_ACTION));
     }
 
     /**
@@ -385,11 +412,11 @@ public class ApolloSocketManager extends Emitter {
     private void onConnectionError(Object data) {
         Log.v(TAG, "Connection Error");
 
-        ApolloSocketManager.this.cleanup();
+        SocketManager.this.cleanup();
 
-        ApolloSocketManager.this.connectionState = ConnectionState.CLOSED;
+        SocketManager.this.connectionState = ConnectionState.CLOSED;
 
-        ApolloSocketManager.this.emitAll(EVENT_CONNECT_ERROR, data);
+        SocketManager.this.emitAll(EVENT_CONNECT_ERROR, data);
     }
 
     private void onData(String data) {
@@ -410,24 +437,24 @@ public class ApolloSocketManager extends Emitter {
     }
 
     /**
-     * Initializes {@link Socket} instances for each namespaces.
+     * Initializes {@link com.github.nkzawa.socketio.client.Socket} instances for each namespaces.
      *
      * @param nsp namespace.
      * @return a socket instance for the namespace.
      */
-    public ApolloSocket socket(String nsp) {
-        ApolloSocket socket = this.nsps.get(nsp);
+    public Socket socket(String nsp) {
+        Socket socket = this.nsps.get(nsp);
         if (socket == null) {
-            socket = new ApolloSocket(this, nsp);
-            ApolloSocket _socket = this.nsps.putIfAbsent(nsp, socket);
+            socket = new Socket(this, nsp);
+            Socket _socket = this.nsps.putIfAbsent(nsp, socket);
             if (_socket != null) {
                 socket = _socket;
             } else {
-                final ApolloSocket s = socket;
-                socket.on(Socket.EVENT_CONNECT, new Listener() {
+                final Socket s = socket;
+                socket.on(com.github.nkzawa.socketio.client.Socket.EVENT_CONNECT, new Listener() {
                     @Override
                     public void call(Object... objects) {
-                        ApolloSocketManager.this.connected.add(s);
+                        SocketManager.this.connected.add(s);
                     }
                 });
             }
@@ -435,7 +462,7 @@ public class ApolloSocketManager extends Emitter {
         return socket;
     }
 
-    /*package*/ void destroy(ApolloSocket socket) {
+    /*package*/ void destroy(Socket socket) {
         this.connected.remove(socket);
 
         if (this.connected.size() > 0){
@@ -443,7 +470,7 @@ public class ApolloSocketManager extends Emitter {
         }
 
         //Unregister Connectivity Receiver
-        this.context.unregisterReceiver(this.connectivityReceiver);
+        this.connectivityReceiver.unregisterReceiver();
 
         this.close();
     }
@@ -451,24 +478,24 @@ public class ApolloSocketManager extends Emitter {
     /*package*/ void packet(Packet packet) {
         Log.v(TAG, String.format("Writing packet %s", packet));
 
-        if (!ApolloSocketManager.this.encoding) {
-            ApolloSocketManager.this.encoding = true;
+        if (!SocketManager.this.encoding) {
+            SocketManager.this.encoding = true;
             this.encoder.encode(packet, new Parser.Encoder.Callback() {
                 @Override
                 public void call(Object[] encodedPackets) {
                     for (Object packet : encodedPackets) {
                         if (packet instanceof String) {
-                            ApolloSocketManager.this.engine.write((String)packet);
+                            SocketManager.this.engine.write((String)packet);
                         } else if (packet instanceof byte[]) {
-                            ApolloSocketManager.this.engine.write((byte[])packet);
+                            SocketManager.this.engine.write((byte[])packet);
                         }
                     }
-                    ApolloSocketManager.this.encoding = false;
-                    ApolloSocketManager.this.processPacketQueue();
+                    SocketManager.this.encoding = false;
+                    SocketManager.this.processPacketQueue();
                 }
             });
         } else {
-            ApolloSocketManager.this.packetBuffer.add(packet);
+            SocketManager.this.packetBuffer.add(packet);
         }
     }
 
@@ -493,10 +520,10 @@ public class ApolloSocketManager extends Emitter {
     }
 
     private void onConnectionClose(String reason) {
-        Log.d(TAG, "Close");
+        Log.d(TAG, "Connection Closed");
         this.cleanup();
         this.connectionState = ConnectionState.CLOSED;
-        this.emit(EVENT_CLOSE, reason);
+        this.emit(EVENT_CLOSE, reason, networkState == NetworkState.ENABLE);
 
         if (this.timeoutScheduler != null) {
             this.timeoutScheduler.shutdown();
@@ -511,20 +538,21 @@ public class ApolloSocketManager extends Emitter {
     }
 
     private void reconnect() {
-        if (this.skipReconnect){
+        if (this.skipReconnect || !this.isNetworkEnable()){
             return;
         }else{
             this.attempt++;
         }
 
-        if (attempt > this.reconnectionAttempts) {
+        if (this.attempt > this.reconnectionAttempts) {
             Log.d(TAG, "Reconnection failed");
 
+            this.skipReconnect = true;
             this.emitAll(EVENT_RECONNECT_FAILED);
-            connectionState = ConnectionState.CLOSED;
+            this.connectionState = ConnectionState.CLOSED;
 
         } else {
-            connectionState = ConnectionState.RECONNECTING;
+            this.connectionState = ConnectionState.RECONNECTING;
 
             long delay = Math.min(attempt * reconnectionDelay(), this.reconnectionDelayMax());
             Log.v(TAG, String.format("Will wait %dms before reconnect attempt", delay));
@@ -535,27 +563,27 @@ public class ApolloSocketManager extends Emitter {
                     EventThread.exec(new Runnable() {
                         @Override
                         public void run() {
-                            if (ApolloSocketManager.this.skipReconnect){
+                            if (SocketManager.this.skipReconnect || !SocketManager.this.isNetworkEnable()){
                                 return;
                             }
 
-                            Log.d(TAG, "Reconnect Attempt: " + ApolloSocketManager.this.attempt);
+                            Log.d(TAG, "Reconnect Attempt: " + SocketManager.this.attempt);
 
-                            ApolloSocketManager.this.emitAll(EVENT_RECONNECT_ATTEMPT, ApolloSocketManager.this.attempt);
-                            ApolloSocketManager.this.emitAll(EVENT_RECONNECTING, ApolloSocketManager.this.attempt);
+                            SocketManager.this.emitAll(EVENT_RECONNECT_ATTEMPT, SocketManager.this.attempt);
+                            SocketManager.this.emitAll(EVENT_RECONNECTING, SocketManager.this.attempt);
 
                             // check again for the case socket closed in above events
-                            if (ApolloSocketManager.this.skipReconnect){
+                            if (SocketManager.this.skipReconnect || !SocketManager.this.isNetworkEnable()){
                                 return;
                             }
 
-                            ApolloSocketManager.this.open(new OpenCallback() {
+                            SocketManager.this.open(new OpenCallback() {
                                 @Override
                                 public void call(Exception err) {
                                     if (err != null) {
-                                        ApolloSocketManager.this.onReconnectError(err);
+                                        SocketManager.this.onReconnectError(err);
                                     } else {
-                                        ApolloSocketManager.this.onReconnect();
+                                        SocketManager.this.onReconnect();
                                     }
                                 }
                             });
@@ -584,8 +612,8 @@ public class ApolloSocketManager extends Emitter {
     private void onReconnectError(Exception err) {
         Log.d(TAG, "Reconnect Attempt Error");
 
-        ApolloSocketManager.this.reconnect();
-        ApolloSocketManager.this.emitAll(EVENT_RECONNECT_ERROR, err);
+        SocketManager.this.reconnect();
+        SocketManager.this.emitAll(EVENT_RECONNECT_ERROR, err);
     }
 
     private ScheduledExecutorService getTimeoutScheduler() {
@@ -610,7 +638,7 @@ public class ApolloSocketManager extends Emitter {
         return this.canReconnect;
     }
 
-    public ApolloSocketManager canReconnect(boolean v) {
+    public SocketManager canReconnect(boolean v) {
         this.canReconnect = v;
         return this;
     }
@@ -619,7 +647,7 @@ public class ApolloSocketManager extends Emitter {
         return this.reconnectionAttempts;
     }
 
-    public ApolloSocketManager setReconnectionAttempts(int v) {
+    public SocketManager setReconnectionAttempts(int v) {
         this.reconnectionAttempts = v;
         return this;
     }
@@ -628,7 +656,7 @@ public class ApolloSocketManager extends Emitter {
         return this.reconnectionDelay;
     }
 
-    public ApolloSocketManager setReconnectionDelay(long v) {
+    public SocketManager setReconnectionDelay(long v) {
         this.reconnectionDelay = v;
         return this;
     }
@@ -637,7 +665,7 @@ public class ApolloSocketManager extends Emitter {
         return this.reconnectionDelayMax;
     }
 
-    public ApolloSocketManager setReconnectionDelayMax(long v) {
+    public SocketManager setReconnectionDelayMax(long v) {
         this.reconnectionDelayMax = v;
         return this;
     }
@@ -646,8 +674,27 @@ public class ApolloSocketManager extends Emitter {
         return this.timeout;
     }
 
-    public ApolloSocketManager setTimeout(long v) {
+    public SocketManager setTimeout(long v) {
         this.timeout = v;
+        return this;
+    }
+
+    public boolean isNetworkEnable(){
+        if(!this.connectivityReceiver.isRegistered()){
+            this.networkState = ConnectivityReceiver.isNetworkAvailable(this.context)? NetworkState.ENABLE : NetworkState.DISABLE;
+        }
+
+        return this.networkState == NetworkState.ENABLE;
+    }
+
+    public SocketManager forceReconnection(){
+        if(this.connectionState == ConnectionState.CLOSED && this.isNetworkEnable()){
+            this.attempt = 0;
+            this.skipReconnect = false;
+
+            this.reconnect();
+        }
+
         return this;
     }
 }

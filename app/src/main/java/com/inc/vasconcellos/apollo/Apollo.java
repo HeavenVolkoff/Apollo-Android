@@ -1,8 +1,18 @@
 package com.inc.vasconcellos.apollo;
 
-import com.github.nkzawa.emitter.Emitter;
-import com.github.nkzawa.socketio.client.Socket;
+import android.util.Log;
 
+import com.github.nkzawa.emitter.Emitter;
+
+import org.json.JSONException;
+import org.json.JSONObject;
+
+import java.io.BufferedReader;
+import java.io.FileInputStream;
+import java.io.FileNotFoundException;
+import java.io.IOException;
+import java.io.InputStreamReader;
+import java.io.ObjectInputStream;
 import java.net.URISyntaxException;
 
 public class Apollo{
@@ -11,7 +21,15 @@ public class Apollo{
     private static Apollo instance;
 
     //Log Tag
-    private static final String TAG = "Apollo";
+    public static final String TAG = Apollo.class.getSimpleName();
+
+    //FileName to save instance
+    public static final String FILE_NAME = "ApolloInstance";
+
+    //Json name fields
+    public static final String JSON_USERNAME = "username";
+    public static final String JSON_PASSWORD = "password";
+    public static final String JSON_LOGGED = "logged";
 
     //Constant
     private static final String SERVER_ADDRESS = "http://104.236.0.59:1969";
@@ -19,10 +37,11 @@ public class Apollo{
     private static final String INTIMATION = "intimation";
     private static final String PROCESS_PIECE = "processPiece";
     private static final String PROCESS_INFO = "processInfo";
-    private static final Integer EMIT = 0;
-    private static final Integer ON = 1;
-    private static final Integer OFF = 2;
-    private static final Integer ONCE = 3;
+    private static final int EMIT = 0;
+    private static final int ON = 1;
+    private static final int OFF = 2;
+    private static final int ONCE = 3;
+    private static final int BUSY = 4;
 
     //Internal
     private ApolloSocket socket;
@@ -31,28 +50,43 @@ public class Apollo{
     private SocketAbstraction emit;
     private SocketAbstraction off;
     private SocketAbstraction once;
+    private SocketAbstraction busy;
+    private String username;
+    private String password;
 
     /**
      * Socket Abstraction
      * - This is something that I came up with to *try* facilitate the events access
      */
     public class SocketAbstraction {
-        private Integer type;
+        private int type;
 
-        SocketAbstraction(Integer type){
+        SocketAbstraction(int type){
             this.type = type;
         }
 
         //Private Methods
         private boolean internalManager(String event, Object... args){
-            if(type.equals(EMIT)){
-                return socket.emit(event, args);
-            }else if(type.equals(ON) && args[0] instanceof Emitter.Listener){
-                return socket.on(event, (Emitter.Listener) args[0], false);
-            }else if(type.equals(OFF) && args[0] instanceof Emitter.Listener){
-                return socket.off(event, (Emitter.Listener) args[0]);
-            }else if(type.equals(ONCE) && args[0] instanceof Emitter.Listener){
-                return socket.on(event, (Emitter.Listener) args[0], true);
+            switch (type){
+                case EMIT:
+                    return socket.emit(event, args);
+                case ON:
+                    if(args[0] instanceof Emitter.Listener){
+                        return socket.on(event, (Emitter.Listener) args[0], false);
+                    }
+                    break;
+                case OFF:
+                    if(args[0] instanceof Emitter.Listener){
+                        return socket.off(event, (Emitter.Listener) args[0]);
+                    }
+                    break;
+                case ONCE:
+                    if(args[0] instanceof Emitter.Listener){
+                        return socket.on(event, (Emitter.Listener) args[0], true);
+                    }
+                    break;
+                case BUSY:
+                    return socket.isEventBusy(event);
             }
 
             return false;
@@ -77,6 +111,14 @@ public class Apollo{
 
         public boolean error(Object... args){
             return internalManager(Socket.EVENT_ERROR, args);
+        }
+
+        public boolean networkOffline(Object... args){
+            return internalManager(Socket.EVENT_NETWORK_OFFLINE, args);
+        }
+
+        public boolean networkOnline(Object... args){
+            return internalManager(Socket.EVENT_NETWORK_ONLINE, args);
         }
 
         public boolean reconnect(Object... args){
@@ -116,17 +158,18 @@ public class Apollo{
         }
     }
 
-    public Apollo() {
+    private Apollo() {
         //Initialize Variables
         logged = false;
         on = new SocketAbstraction(ON);
         emit = new SocketAbstraction(EMIT);
         off = new SocketAbstraction(OFF);
         once = new SocketAbstraction(ONCE);
+        busy = new SocketAbstraction(BUSY);
 
         //Initialize ApolloSocket
         try{
-            socket = new ApolloSocket_OLD(SERVER_ADDRESS, new String[] {LOGIN, PROCESS_INFO, PROCESS_PIECE, PROCESS_INFO});
+            socket = new ApolloSocket(SERVER_ADDRESS, new String[] {LOGIN, PROCESS_INFO, PROCESS_PIECE, PROCESS_INFO});
         }catch (URISyntaxException e){
             //Should Never Happen, But in case it happens we have nothing to do otherwise exit;//TODO: Display a error Message to User Than Exit
             e.printStackTrace();
@@ -138,8 +181,63 @@ public class Apollo{
             @Override
             public void call(final Object... args) {
                 logged = args[1] != null && args[1] instanceof Boolean ? (Boolean) args[1] : false;
+
+                if(!logged){
+                    Apollo.this.username = null;
+                    Apollo.this.password = null;
+                }
             }
         });
+    }
+
+    private void retriveInstance(){
+        try {
+            StringBuilder dataBuilder = new StringBuilder("");
+
+            FileInputStream fis = App.instance().openFileInput(FILE_NAME);
+            InputStreamReader isr = new InputStreamReader(fis);
+            BufferedReader buffReader = new BufferedReader(isr);
+
+            String readString = buffReader.readLine();
+            while (readString != null) {
+                dataBuilder.append(readString);
+                readString = buffReader.readLine();
+            }
+
+            isr.close();
+
+            JSONObject apolloJson = new JSONObject(dataBuilder.toString());
+
+            String username = apolloJson.getString(JSON_USERNAME);
+            String password = apolloJson.getString(JSON_PASSWORD);
+            boolean logged = apolloJson.getBoolean(JSON_LOGGED);
+
+            if(logged){
+                this.username = username;
+                this.password = password;
+
+                this.login(username, password);
+            }
+
+        } catch (FileNotFoundException e) {
+            Log.e(TAG, "Error while opening file: " + Apollo.FILE_NAME, e);
+
+        } catch (IOException e) {
+            Log.e(TAG, "Error while reading Apollo JSON file", e);
+
+        } catch (JSONException e) {
+            Log.e(TAG, "Error while parsing Apollo JSON", e);
+        }
+    }
+
+    private JSONObject saveInstance() throws JSONException{
+        JSONObject apollo = new JSONObject();
+
+        apollo.put(JSON_USERNAME, this.username);
+        apollo.put(JSON_PASSWORD, this.password);
+        apollo.put(JSON_LOGGED, this.logged);
+
+        return apollo;
     }
 
     public static Apollo getInstance(){
@@ -154,6 +252,27 @@ public class Apollo{
         return instance;
     }
 
+    /**
+     * WARNING: internal use only
+     * This will delete the static reference to apollo and return
+     * a JSON object with all the inner class sensitive information
+     * to be saved and retrieved later.
+     *
+     * @return = JSON representation of all the inner class sensitive information
+     */
+    public JSONObject deleteInstance() throws JSONException{
+        JSONObject apollo;
+
+        try{
+            apollo = this.saveInstance();
+
+        } finally {
+            Apollo.instance = null;
+        }
+
+        return apollo;
+    }
+
     public Boolean isLogged() {
         return logged;
     }
@@ -162,14 +281,14 @@ public class Apollo{
 
     public Boolean isNetworkAvailable() { return socket.isNetworkAvailable(); }
 
-    public void connect() { socket.connect(); }
+    public void connect() {
+        if(!socket.isConnected()){
+            socket.connect();
+        }
+    }
 
     public SocketAbstraction on() {
         return on;
-    }
-
-    public SocketAbstraction emit() {
-        return emit;
     }
 
     public SocketAbstraction off() {
@@ -178,5 +297,18 @@ public class Apollo{
 
     public SocketAbstraction once() {
         return once;
+    }
+
+    public SocketAbstraction busy(){
+        return busy;
+    }
+
+    public void login (String username, String password){
+        if(!this.logged){
+            this.username = username;
+            this.password = password;
+
+            this.emit.login(username, password);
+        }
     }
 }
