@@ -1,6 +1,7 @@
 package com.inc.vasconcellos.apollo;
 
 import android.app.Application;
+import android.content.SharedPreferences;
 import android.util.Log;
 
 import org.json.JSONException;
@@ -32,27 +33,22 @@ public class App extends Application {
 
         //We are going to be killed, save serialized instance of Apollo
         if(level == TRIM_MEMORY_COMPLETE){
-            FileOutputStream fos;
 
             try {
                 String apolloInstanceJSON = Apollo.getInstance().deleteInstance().toString();
 
-                fos = this.openFileOutput(Apollo.FILE_NAME, MODE_PRIVATE);
-                OutputStreamWriter osw = new OutputStreamWriter (fos) ;
-                osw.write (apolloInstanceJSON) ;
-                osw.flush ( ) ;
-                osw.close ( ) ;
+                SharedPreferences settings = getSharedPreferences(Apollo.PREFS_NAME, 0);
+                SharedPreferences.Editor editor = settings.edit();
+
+                editor.putString(Apollo.PREFS_JSON, apolloInstanceJSON);
+
+                editor.commit();
 
                 Log.d(TAG, "Apollo Instance deleted to save memory");
 
-            }catch (JSONException e){
+            }catch (JSONException e) {
                 Log.e(TAG, "Error while generating JSON from Apollo instance", e);
 
-            }catch (FileNotFoundException e) {
-                Log.e(TAG, "Error while opening file: " + Apollo.FILE_NAME, e);
-
-            } catch (IOException e){
-                Log.e(TAG, "Error while saving JSON of Apollo", e);
             }
         }
     }

@@ -1,5 +1,7 @@
 package com.inc.vasconcellos.apollo;
 
+import android.content.Context;
+import android.content.SharedPreferences;
 import android.util.Log;
 
 import com.github.nkzawa.emitter.Emitter;
@@ -24,7 +26,8 @@ public class Apollo{
     public static final String TAG = Apollo.class.getSimpleName();
 
     //FileName to save instance
-    public static final String FILE_NAME = "ApolloInstance";
+    public static final String PREFS_NAME = "ApolloInstance";
+    public static final String PREFS_JSON = "ApolloJSON";
 
     //Json name fields
     public static final String JSON_USERNAME = "username";
@@ -190,23 +193,12 @@ public class Apollo{
         });
     }
 
-    private void retriveInstance(){
+    private void retriveInstance(Context context){
         try {
-            StringBuilder dataBuilder = new StringBuilder("");
+            SharedPreferences settings = context.getSharedPreferences(PREFS_NAME, 0);
+            String apolloJSONString = settings.getString(PREFS_JSON, "");
 
-            FileInputStream fis = App.instance().openFileInput(FILE_NAME);
-            InputStreamReader isr = new InputStreamReader(fis);
-            BufferedReader buffReader = new BufferedReader(isr);
-
-            String readString = buffReader.readLine();
-            while (readString != null) {
-                dataBuilder.append(readString);
-                readString = buffReader.readLine();
-            }
-
-            isr.close();
-
-            JSONObject apolloJson = new JSONObject(dataBuilder.toString());
+            JSONObject apolloJson = new JSONObject(apolloJSONString);
 
             String username = apolloJson.getString(JSON_USERNAME);
             String password = apolloJson.getString(JSON_PASSWORD);
@@ -218,12 +210,6 @@ public class Apollo{
 
                 this.login(username, password);
             }
-
-        } catch (FileNotFoundException e) {
-            Log.e(TAG, "Error while opening file: " + Apollo.FILE_NAME, e);
-
-        } catch (IOException e) {
-            Log.e(TAG, "Error while reading Apollo JSON file", e);
 
         } catch (JSONException e) {
             Log.e(TAG, "Error while parsing Apollo JSON", e);
